@@ -1,0 +1,8 @@
+# LF line endings in the repo and in every working copy, on every OS.
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary

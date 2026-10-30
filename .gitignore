@@ -147,3 +147,12 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Hello World
+playwright-report/
+test-results/
+blob-report/
+CLAUDE.local.md
+.claude/settings.local.json
+# The brief and its mockups belong to Wolfpack Digital: keep a local copy only.
+docs/brief/
