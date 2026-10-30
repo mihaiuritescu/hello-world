@@ -1,0 +1,5 @@
+# pnpm reads its project settings from this file. There is one package; no workspaces.
+# Dependency install scripts are blocked by default (strictDepBuilds). Vite's optional
+# fsevents dependency (macOS only) has one and isn't needed, so it stays blocked.
+allowBuilds:
+  fsevents: false

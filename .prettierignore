@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+dist/
+coverage/
+playwright-report/
+test-results/
+docs/brief/
+# Documentation is formatted by hand; Prettier would pad tables into very long lines.
+*.md

@@ -1,0 +1,10 @@
+// The browser app: Vue components plus the code it shares with the server.
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["env.d.ts", "src/client/**/*", "src/client/**/*.vue", "src/shared/**/*"],
+  "exclude": ["src/**/*.test.ts", "src/client/test/**"],
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo"
+  }
+}

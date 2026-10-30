@@ -1,0 +1,5 @@
+# Fast checks before every commit. Tests run in CI and through `pnpm verify`.
+# Tools are called from node_modules so the hook works without a global pnpm.
+node_modules/.bin/eslint --cache .
+node_modules/.bin/prettier --check .
+node_modules/.bin/vue-tsc --build

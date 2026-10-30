@@ -92,7 +92,11 @@ Integration tests need MySQL, so run `pnpm db:up` first.
 
 - Prefer the platform and existing dependencies. Add a package only when it removes real work.
 - Every package must be free to use, with no payment. Check the licence with `npm view <pkg> license`, then run `pnpm check:licenses`.
-- Pin exact versions (`pnpm add -E`). Anything that ships to the browser or the server goes in `dependencies`.
+- Pin exact versions (`pnpm add -E`).
+- **Where a package goes:**
+  - **`dependencies`:** packages the server needs at runtime. They are the only ones installed in the Docker image.
+  - **`devDependencies`:** packages only bundled into the browser build, and all tooling.
+  - `pnpm check:licenses` checks both lists.
 
 ## Cloud safety
 
