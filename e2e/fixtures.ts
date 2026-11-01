@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test'
+import { resetDatabase } from './database.ts'
 
 // A 1×1 transparent PNG, served instead of real map tiles so the tests never load
 // OpenStreetMap's servers and don't depend on the network.
@@ -8,11 +9,12 @@ const BLANK_TILE = Buffer.from(
 )
 
 /**
- * The default `page`, with map tiles stubbed, that fails the test on any browser console
- * error. That includes Content-Security-Policy violations.
+ * The default `page`, on an empty database, with map tiles stubbed. It fails the test on any
+ * browser console error, which includes Content-Security-Policy violations.
  */
 export const test = base.extend({
   page: async ({ page }, use) => {
+    await resetDatabase()
     await page.route('https://tile.openstreetmap.org/**', (route) =>
       route.fulfill({ contentType: 'image/png', body: BLANK_TILE }),
     )

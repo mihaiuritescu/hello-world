@@ -17,3 +17,8 @@ body {
 .v-application {
   font-family: var(--app-font);
 }
+
+/* The open room's pin: Leaflet's blue marker turned red, so it stands out. */
+.room-pin--active {
+  filter: hue-rotate(150deg) saturate(1.6);
+}

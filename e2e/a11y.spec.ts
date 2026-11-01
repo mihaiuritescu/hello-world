@@ -12,4 +12,14 @@ test.describe('accessibility', () => {
 
     expect(results.violations).toEqual([])
   })
+
+  test('an open room, with its pin, has no detectable WCAG violations', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('.leaflet-container').click({ position: { x: 250, y: 360 } })
+    await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+
+    expect(results.violations).toEqual([])
+  })
 })
