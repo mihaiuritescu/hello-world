@@ -24,6 +24,7 @@ WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src/server ./src/server
+COPY src/shared ./src/shared
 COPY --from=build /app/dist/client ./dist/client
 ARG GIT_SHA=dev
 ENV APP_VERSION=$GIT_SHA

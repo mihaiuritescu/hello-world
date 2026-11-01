@@ -1,3 +1,4 @@
+import { Writable } from 'node:stream'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createTestApp, type TestApp } from './test/test-app.ts'
 
@@ -21,6 +22,15 @@ describe('app', () => {
       expect(csp).not.toContain('upgrade-insecure-requests')
       expect(response.headers['strict-transport-security']).toBeUndefined()
       expect(response.headers['referrer-policy']).toBe('strict-origin-when-cross-origin')
+    })
+
+    it('allow fonts and stylesheets only from the app itself', async () => {
+      const response = await testApp.app.inject('/healthz')
+
+      const csp = String(response.headers['content-security-policy'])
+      expect(csp).toContain("font-src 'self'")
+      expect(csp).toContain("style-src 'self' 'unsafe-inline'")
+      expect(csp).not.toMatch(/(^|\s)https:(\s|;|$)/)
     })
 
     it('add HTTPS-only headers when the public URL uses https', async () => {
@@ -60,6 +70,51 @@ describe('app', () => {
         expect(response.json()).toEqual({ status: 'unavailable' })
       } finally {
         await offlineApp.close()
+      }
+    })
+  })
+
+  describe('robustness', () => {
+    it('limits how long a client may take to send a request', () => {
+      expect(testApp.app.server.requestTimeout).toBe(30_000)
+    })
+
+    it('keeps SQL, with the values it carries, out of error logs', async () => {
+      let logs = ''
+      const logStream = new Writable({
+        write(chunk: Buffer, _encoding, done) {
+          logs += chunk.toString()
+          done()
+        },
+      })
+      // mysql2 attaches the SQL, with parameter values filled in, to every query error.
+      const failing = Object.assign(new Error('Lock wait timeout exceeded'), {
+        errno: 1205,
+        sql: "insert into `messages` values (1, 'Alice', 'a private message')",
+      })
+      const failingApp = await createTestApp(
+        { LOG_LEVEL: 'error' },
+        {
+          logStream,
+          broadcaster: {
+            roomCreated: () => {
+              throw failing
+            },
+          },
+        },
+      )
+      try {
+        const response = await failingApp.app.inject({
+          method: 'POST',
+          url: '/api/rooms',
+          payload: { lat: 1, lng: 1 },
+        })
+
+        expect(response.statusCode).toBe(500)
+        expect(logs).toContain('1205')
+        expect(logs).not.toContain('a private message')
+      } finally {
+        await failingApp.close()
       }
     })
   })
