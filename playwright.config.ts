@@ -30,6 +30,15 @@ export default defineConfig({
     url: `${BASE_URL}/readyz`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { PORT: String(PORT), DB_NAME: 'hello_world_e2e', LOG_LEVEL: 'warn' },
+    env: {
+      PORT: String(PORT),
+      DB_NAME: 'hello_world_e2e',
+      LOG_LEVEL: 'warn',
+      // Every test is a new visitor from the same address, so the run would soon meet the
+      // per-address limits. The integration tests cover the limits themselves.
+      RATE_LIMIT_API_PER_MINUTE: '100000',
+      RATE_LIMIT_ROOMS_PER_MINUTE: '100000',
+      RATE_LIMIT_MESSAGES_PER_MINUTE: '100000',
+    },
   },
 })

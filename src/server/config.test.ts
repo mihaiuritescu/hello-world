@@ -25,4 +25,22 @@ describe('loadConfig', () => {
   it('names the offending variable when a value is invalid', () => {
     expect(() => loadConfig({ PORT: 'eighty' })).toThrow(/Invalid configuration[\s\S]*PORT/)
   })
+
+  it('limits each client to 300 API requests, 30 rooms and 30 messages a minute by default', () => {
+    expect(loadConfig({}).rateLimits).toEqual({
+      apiPerMinute: 300,
+      roomsPerMinute: 30,
+      messagesPerMinute: 30,
+    })
+    expect(loadConfig({ RATE_LIMIT_ROOMS_PER_MINUTE: '5' }).rateLimits.roomsPerMinute).toBe(5)
+  })
+
+  it('refuses a rate limit that is not a positive whole number', () => {
+    expect(() => loadConfig({ RATE_LIMIT_API_PER_MINUTE: '0' })).toThrow(
+      /RATE_LIMIT_API_PER_MINUTE/,
+    )
+    expect(() => loadConfig({ RATE_LIMIT_MESSAGES_PER_MINUTE: '2.5' })).toThrow(
+      /RATE_LIMIT_MESSAGES_PER_MINUTE/,
+    )
+  })
 })

@@ -3,12 +3,13 @@ import { join, sep } from 'node:path'
 import type { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import helmet, { type FastifyHelmetOptions } from '@fastify/helmet'
+import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify'
 import type { Kysely } from 'kysely'
 import type { Config } from './config.ts'
 import type { Database } from './db/database.ts'
-import { errorBody, registerErrorHandler } from './errors.ts'
+import { errorBody, registerErrorHandler, tooManyRequests } from './errors.ts'
 import { registerHealthRoutes } from './health.routes.ts'
 import { createMessagesRepository } from './messages/messages.repository.ts'
 import { registerMessageRoutes } from './messages/messages.routes.ts'
@@ -53,13 +54,27 @@ export async function buildApp({
 
   registerErrorHandler(app)
   await app.register(helmet, helmetOptions(config))
+  // Per client address, counted by request.ip, which honours TRUST_PROXY. Routes registered after
+  // this get the API-wide limit unless they set their own. Only the API is limited: the health
+  // checks, the SPA's files and the WebSocket path are not.
+  await app.register(rateLimit, {
+    max: config.rateLimits.apiPerMinute,
+    timeWindow: '1 minute',
+    allowList: (request) => !request.url.startsWith('/api/'),
+    errorResponseBuilder: (_request, { after }) => tooManyRequests(after),
+  })
   registerHealthRoutes(app, { db, version: config.version })
   const rooms = createRoomsRepository(db)
-  registerRoomRoutes(app, { rooms, broadcaster: announcer })
+  registerRoomRoutes(app, {
+    rooms,
+    broadcaster: announcer,
+    createsPerMinute: config.rateLimits.roomsPerMinute,
+  })
   registerMessageRoutes(app, {
     rooms,
     messages: createMessagesRepository(db),
     broadcaster: announcer,
+    sendsPerMinute: config.rateLimits.messagesPerMinute,
   })
 
   if (existsSync(join(CLIENT_DIR, 'index.html'))) {

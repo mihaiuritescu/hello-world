@@ -10,11 +10,13 @@ interface MessageRoutesDeps {
   rooms: RoomsRepository
   messages: MessagesRepository
   broadcaster: Broadcaster
+  /** Messages one client may send a minute. */
+  sendsPerMinute: number
 }
 
 export function registerMessageRoutes(
   app: FastifyInstance,
-  { rooms, messages, broadcaster }: MessageRoutesDeps,
+  { rooms, messages, broadcaster, sendsPerMinute }: MessageRoutesDeps,
 ) {
   app.get('/api/rooms/:roomId/messages', async (request) => {
     const { roomId } = parseInput(RoomIdParamsSchema, request.params)
@@ -22,7 +24,9 @@ export function registerMessageRoutes(
     return { messages: await messages.listLatest(roomId, LIMITS.loadedMessages) }
   })
 
-  app.post('/api/rooms/:roomId/messages', async (request, reply) => {
+  // Sending has its own limit, below the API-wide one: it stores a row and announces it.
+  const rateLimit = { max: sendsPerMinute, timeWindow: '1 minute' }
+  app.post('/api/rooms/:roomId/messages', { config: { rateLimit } }, async (request, reply) => {
     const { roomId } = parseInput(RoomIdParamsSchema, request.params)
     const draft = parseInput(MessageDraftSchema, request.body)
     const result = await messages.create({ roomId, ...draft })

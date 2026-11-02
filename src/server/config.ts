@@ -8,6 +8,7 @@ function envVar<T extends z.ZodType>(schema: T) {
 }
 
 const port = z.coerce.number().int().min(1).max(65_535)
+const perMinute = z.coerce.number().int().min(1)
 
 // Every setting has a default that works for a local run, so no .env file is required.
 const EnvSchema = z.object({
@@ -25,6 +26,9 @@ const EnvSchema = z.object({
   DB_CA_FILE: envVar(z.string().optional()),
   APP_VERSION: envVar(z.string().default('dev')),
   IMAGE_DIGEST: envVar(z.string().optional()),
+  RATE_LIMIT_API_PER_MINUTE: envVar(perMinute.default(300)),
+  RATE_LIMIT_ROOMS_PER_MINUTE: envVar(perMinute.default(30)),
+  RATE_LIMIT_MESSAGES_PER_MINUTE: envVar(perMinute.default(30)),
 })
 
 export type LogLevel = (typeof LOG_LEVELS)[number]
@@ -37,6 +41,16 @@ export interface DbConfig {
   database: string
   /** CA bundle used to verify the server certificate. TLS is on only when this is set. */
   caFile: string | undefined
+}
+
+/** How many requests one client address may make a minute. */
+export interface RateLimits {
+  /** Any API request. */
+  apiPerMinute: number
+  /** Room creations, which every connected client hears about. */
+  roomsPerMinute: number
+  /** Messages sent. */
+  messagesPerMinute: number
 }
 
 export interface Config {
@@ -56,6 +70,7 @@ export interface Config {
   trustProxy: string | false
   db: DbConfig
   version: { app: string; image: string | null }
+  rateLimits: RateLimits
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -82,5 +97,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       caFile: vars.DB_CA_FILE,
     },
     version: { app: vars.APP_VERSION, image: vars.IMAGE_DIGEST ?? null },
+    rateLimits: {
+      apiPerMinute: vars.RATE_LIMIT_API_PER_MINUTE,
+      roomsPerMinute: vars.RATE_LIMIT_ROOMS_PER_MINUTE,
+      messagesPerMinute: vars.RATE_LIMIT_MESSAGES_PER_MINUTE,
+    },
   }
 }

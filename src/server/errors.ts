@@ -51,6 +51,11 @@ export function roomNotFound(roomId: number): HttpError {
   return new HttpError(404, 'ROOM_NOT_FOUND', `Room ${roomId} does not exist.`)
 }
 
+/** The 429 for a client over a rate limit. `after` says when to try again, such as "1 minute". */
+export function tooManyRequests(after: string): HttpError {
+  return new HttpError(429, 'RATE_LIMITED', `Too many requests. Try again in ${after}.`)
+}
+
 /** Parses untrusted input, or throws a 400 VALIDATION_FAILED that lists what was wrong. */
 export function parseInput<T extends z.ZodType>(schema: T, input: unknown): z.output<T> {
   const result = schema.safeParse(input)
