@@ -59,3 +59,23 @@ export function createDb(config: DbConfig): Kysely<Database> {
     }),
   })
 }
+
+/** Ids are BIGINT. Fail loudly rather than silently lose precision past 2^53. */
+export function toSafeInteger(value: number | bigint | undefined): number {
+  const id = Number(value)
+  if (!Number.isSafeInteger(id)) throw new Error(`Id ${String(value)} is not a safe integer`)
+  return id
+}
+
+/** The MySQL errors that repositories handle themselves instead of failing the request. */
+export const MysqlErrno = {
+  /** A unique key already holds the value. */
+  duplicateKey: 1062,
+  /** A foreign key points at a row that doesn't exist. */
+  missingParent: 1452,
+} as const
+
+/** Whether `error` is the MySQL error with this number. */
+export function hasErrno(error: unknown, errno: number): boolean {
+  return typeof error === 'object' && error !== null && 'errno' in error && error.errno === errno
+}

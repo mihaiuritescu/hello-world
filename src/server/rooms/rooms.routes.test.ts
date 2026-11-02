@@ -1,6 +1,6 @@
 import type { Room } from '#shared/domain.ts'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { Broadcaster } from '../realtime/broadcaster.ts'
+import { silentBroadcaster, type Broadcaster } from '../realtime/broadcaster.ts'
 import { resetDatabase } from '../test/reset-db.ts'
 import { createTestApp, type TestApp } from '../test/test-app.ts'
 
@@ -8,7 +8,10 @@ const ISO_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 
 describe('rooms API', () => {
   const announced: Room[] = []
-  const broadcaster: Broadcaster = { roomCreated: (room) => announced.push(room) }
+  const broadcaster: Broadcaster = {
+    ...silentBroadcaster,
+    roomCreated: (room) => announced.push(room),
+  }
   let testApp: TestApp
 
   beforeAll(async () => {

@@ -10,6 +10,8 @@ import type { Config } from './config.ts'
 import type { Database } from './db/database.ts'
 import { errorBody, registerErrorHandler } from './errors.ts'
 import { registerHealthRoutes } from './health.routes.ts'
+import { createMessagesRepository } from './messages/messages.repository.ts'
+import { registerMessageRoutes } from './messages/messages.routes.ts'
 import { silentBroadcaster, type Broadcaster } from './realtime/broadcaster.ts'
 import { createRoomsRepository } from './rooms/rooms.repository.ts'
 import { registerRoomRoutes } from './rooms/rooms.routes.ts'
@@ -46,7 +48,9 @@ export async function buildApp({
   registerErrorHandler(app)
   await app.register(helmet, helmetOptions(config))
   registerHealthRoutes(app, { db, version: config.version })
-  registerRoomRoutes(app, { rooms: createRoomsRepository(db), broadcaster })
+  const rooms = createRoomsRepository(db)
+  registerRoomRoutes(app, { rooms, broadcaster })
+  registerMessageRoutes(app, { rooms, messages: createMessagesRepository(db), broadcaster })
 
   if (existsSync(join(CLIENT_DIR, 'index.html'))) {
     await app.register(fastifyStatic, {

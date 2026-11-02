@@ -46,6 +46,11 @@ export function errorBody(
   }
 }
 
+/** The 404 for a room id that matches no room. */
+export function roomNotFound(roomId: number): HttpError {
+  return new HttpError(404, 'ROOM_NOT_FOUND', `Room ${roomId} does not exist.`)
+}
+
 /** Parses untrusted input, or throws a 400 VALIDATION_FAILED that lists what was wrong. */
 export function parseInput<T extends z.ZodType>(schema: T, input: unknown): z.output<T> {
   const result = schema.safeParse(input)

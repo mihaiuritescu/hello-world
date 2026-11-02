@@ -7,7 +7,23 @@ export interface Room {
   createdAt: string
 }
 
+/** A message in a room. Ids grow with every message, so they also set the order (I4). */
+export interface Message {
+  id: number
+  roomId: number
+  authorName: string
+  body: string
+  /** ISO-8601, in UTC. */
+  createdAt: string
+}
+
 export const LIMITS = {
   /** The map shows at most this many rooms: the newest ones. */
   listedRooms: 1000,
+  /** A room opens with at most this many messages: the newest ones. */
+  loadedMessages: 100,
+  /** The longest author name. */
+  authorName: 40,
+  /** The longest message. */
+  messageBody: 1000,
 } as const

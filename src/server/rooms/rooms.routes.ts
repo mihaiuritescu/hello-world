@@ -1,7 +1,7 @@
 import { LIMITS } from '#shared/domain.ts'
 import { CoordinatesSchema, RoomIdParamsSchema } from '#shared/schemas.ts'
 import type { FastifyInstance } from 'fastify'
-import { HttpError, parseInput } from '../errors.ts'
+import { parseInput, roomNotFound } from '../errors.ts'
 import type { Broadcaster } from '../realtime/broadcaster.ts'
 import type { RoomsRepository } from './rooms.repository.ts'
 
@@ -17,7 +17,7 @@ export function registerRoomRoutes(app: FastifyInstance, { rooms, broadcaster }:
   app.get('/api/rooms/:roomId', async (request) => {
     const { roomId } = parseInput(RoomIdParamsSchema, request.params)
     const room = await rooms.findById(roomId)
-    if (!room) throw new HttpError(404, 'ROOM_NOT_FOUND', `Room ${roomId} does not exist.`)
+    if (!room) throw roomNotFound(roomId)
     return room
   })
 

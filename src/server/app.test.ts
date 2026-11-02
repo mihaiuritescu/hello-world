@@ -1,5 +1,6 @@
-import { Writable } from 'node:stream'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { silentBroadcaster } from './realtime/broadcaster.ts'
+import { captureLogs } from './test/log-capture.ts'
 import { createTestApp, type TestApp } from './test/test-app.ts'
 
 describe('app', () => {
@@ -80,13 +81,7 @@ describe('app', () => {
     })
 
     it('keeps SQL, with the values it carries, out of error logs', async () => {
-      let logs = ''
-      const logStream = new Writable({
-        write(chunk: Buffer, _encoding, done) {
-          logs += chunk.toString()
-          done()
-        },
-      })
+      const logs = captureLogs()
       // mysql2 attaches the SQL, with parameter values filled in, to every query error.
       const failing = Object.assign(new Error('Lock wait timeout exceeded'), {
         errno: 1205,
@@ -95,8 +90,9 @@ describe('app', () => {
       const failingApp = await createTestApp(
         { LOG_LEVEL: 'error' },
         {
-          logStream,
+          logStream: logs.stream,
           broadcaster: {
+            ...silentBroadcaster,
             roomCreated: () => {
               throw failing
             },
@@ -111,8 +107,8 @@ describe('app', () => {
         })
 
         expect(response.statusCode).toBe(500)
-        expect(logs).toContain('1205')
-        expect(logs).not.toContain('a private message')
+        expect(logs.text()).toContain('1205')
+        expect(logs.text()).not.toContain('a private message')
       } finally {
         await failingApp.close()
       }

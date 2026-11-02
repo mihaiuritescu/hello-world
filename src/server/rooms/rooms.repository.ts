@@ -1,7 +1,7 @@
 import type { Room } from '#shared/domain.ts'
 import type { Coordinates } from '#shared/schemas.ts'
 import type { Kysely, Selectable } from 'kysely'
-import type { Database, RoomsTable } from '../db/database.ts'
+import { toSafeInteger, type Database, type RoomsTable } from '../db/database.ts'
 
 export interface RoomsRepository {
   /** The newest `limit` rooms, oldest first. */
@@ -49,11 +49,4 @@ function toRoom(row: Selectable<RoomsTable>): Room {
     lng: row.lng,
     createdAt: row.created_at.toISOString(),
   }
-}
-
-/** Ids are BIGINT. Fail loudly rather than silently lose precision past 2^53. */
-function toSafeInteger(value: number | bigint | undefined): number {
-  const id = Number(value)
-  if (!Number.isSafeInteger(id)) throw new Error(`Id ${String(value)} is not a safe integer`)
-  return id
 }
