@@ -1,7 +1,10 @@
 # One image serves the SPA, the REST API and the WebSocket.
 # Builds for the local architecture: amd64 on most laptops, arm64 on Apple Silicon and Graviton.
 
-FROM node:24.22.2-alpine AS base
+# Pinned by the digest of the multi-arch index, so a rebuild can't pick up a changed base image.
+ARG NODE_IMAGE=node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85
+
+FROM ${NODE_IMAGE} AS base
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /app
@@ -18,7 +21,7 @@ FROM base AS prod-deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
-FROM node:24.22.2-alpine AS runtime
+FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
