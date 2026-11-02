@@ -13,7 +13,11 @@ type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>
 /** The parts of an Engine.IO connection, under each Socket.IO one, that this file uses. */
 interface EngineConnection {
   request: IncomingMessage
+  /** Packets waiting for the client to take them. */
+  writeBuffer: unknown[]
+  on(event: 'packetCreate', listener: () => void): void
   once(event: 'close', listener: () => void): void
+  close(discard: boolean): void
 }
 
 interface SocketServerOptions {
@@ -29,6 +33,8 @@ interface SocketServerOptions {
 
 const ROOM_CHANNEL_PREFIX = 'room:'
 const MINUTE_MS = 60_000
+/** Packets queued for one connection before it counts as stalled. */
+const MAX_BACKLOG = 500
 const RATE_LIMITED: SubscribeReply = { ok: false, error: 'RATE_LIMITED' }
 
 /** The channel of the clients that have a room open. */
@@ -70,6 +76,7 @@ export function attachSocketServer(
       if (open > 0) openByAddress.set(address, open)
       else openByAddress.delete(address)
     })
+    closeWhenStalled(connection)
   })
 
   // The raw connections under the WebSockets, so shutdown can cut off clients that never answer.
@@ -130,6 +137,22 @@ function isOwnOrigin(request: IncomingMessage, publicHost: string | null): boole
     // Not a URL, such as the "null" origin of a sandboxed page.
     return false
   }
+}
+
+/**
+ * Cuts off a connection whose client stopped reading. Nothing caps what the server sends, and a
+ * client that answers the heartbeat is never timed out, so its packets would queue without end.
+ * `close(true)` drops the queue: a plain close waits for it to drain, which never happens. An
+ * honest but slow client reconnects with its backoff, then reloads what it missed (I2).
+ */
+export function closeWhenStalled(
+  connection: Pick<EngineConnection, 'writeBuffer' | 'on' | 'close'>,
+  maxBacklog = MAX_BACKLOG,
+): void {
+  // The engine announces each packet just before it queues it.
+  connection.on('packetCreate', () => {
+    if (connection.writeBuffer.length >= maxBacklog) connection.close(true)
+  })
 }
 
 /**

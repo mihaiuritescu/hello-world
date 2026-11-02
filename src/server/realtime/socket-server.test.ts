@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import type { Message } from '#shared/domain.ts'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetDatabase } from '../test/reset-db.ts'
 import {
   connectTo,
@@ -11,6 +12,7 @@ import {
   type TestSocket,
 } from '../test/socket-client.ts'
 import { createTestApp, type TestApp } from '../test/test-app.ts'
+import { closeWhenStalled } from './socket-server.ts'
 
 describe('real-time delivery', () => {
   let testApp: TestApp
@@ -209,6 +211,27 @@ describe('real-time delivery', () => {
     } finally {
       silent.destroy()
     }
+  })
+})
+
+describe('closeWhenStalled', () => {
+  it('cuts off a connection whose client stopped reading, dropping its queue', () => {
+    const connection = Object.assign(new EventEmitter(), {
+      writeBuffer: [] as unknown[],
+      close: vi.fn(),
+    })
+    closeWhenStalled(connection, 3)
+
+    // The engine announces each packet, then queues it. This client never takes any.
+    for (let sent = 0; sent < 3; sent += 1) {
+      connection.emit('packetCreate')
+      connection.writeBuffer.push({})
+    }
+    expect(connection.close).not.toHaveBeenCalled()
+
+    connection.emit('packetCreate')
+
+    expect(connection.close).toHaveBeenCalledWith(true)
   })
 })
 
