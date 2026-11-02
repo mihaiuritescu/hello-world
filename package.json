@@ -39,6 +39,7 @@
     "fastify": "5.12.7",
     "kysely": "0.29.7",
     "mysql2": "3.24.6",
+    "socket.io": "4.8.4",
     "zod": "4.6.7"
   },
   "devDependencies": {
@@ -74,6 +75,7 @@
     "pinia": "4.1.0",
     "pino-pretty": "13.2.0",
     "prettier": "3.9.10",
+    "socket.io-client": "4.8.4",
     "typescript": "6.0.3",
     "vite": "8.3.5",
     "vite-plugin-vuetify": "2.1.3",
