@@ -67,3 +67,48 @@ jobs:
       - name: Stop
         if: always()
         run: docker compose down --volumes
+
+  infra:
+    name: Infrastructure lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint the CloudFormation template
+        run: pipx run cfn-lint==1.59.0 infra/aws/hello-world-demo.yaml
+      - name: Lint the host deploy script
+        run: shellcheck deploy/aws/deploy.sh
+
+  publish:
+    # The image the AWS demo runs: main only, once every other check has passed. Deploys pin the
+    # digest this job prints (see infra/aws/RUNBOOK.md).
+    name: Publish the arm64 image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verify, e2e, docker, infra]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Log in to GitHub Container Registry
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the image
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker build \
+            --build-arg "GIT_SHA=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image:$GITHUB_SHA" .
+          docker push "$image:$GITHUB_SHA"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$GITHUB_SHA")
+          {
+            echo '### Image for the AWS demo'
+            echo
+            echo "- ImageDigest: \`$digest\`"
+            echo "- GitSha: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
