@@ -149,6 +149,31 @@ describe('realtime store', () => {
     expect(requestedPaths()).toEqual([])
   })
 
+  it('keeps a room the server refused to follow up to date, and subscribes again', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const realtime = await liveStore()
+    void realtime.openRoom(7)
+    await flushPromises()
+    // Over the server's limit for this connection: it stays open, but no one follows the room.
+    fake.subscriptions[0]?.answer({ ok: false, error: 'RATE_LIMITED' })
+    await flushPromises()
+    requestJsonMock.mockClear()
+
+    vi.advanceTimersByTime(10_000)
+    await flushPromises()
+
+    expect(fake.subscriptions.map((subscription) => subscription.roomId)).toEqual([7, 7])
+    fake.subscriptions[1]?.answer({ ok: true })
+    await flushPromises()
+    expect(requestedPaths()).toContain('/api/rooms/7/messages')
+
+    // Followed at last, so the polling stops.
+    requestJsonMock.mockClear()
+    vi.advanceTimersByTime(30_000)
+    await flushPromises()
+    expect(requestedPaths()).toEqual([])
+  })
+
   it('reconnects by itself when the server ends the session', async () => {
     await liveStore()
 

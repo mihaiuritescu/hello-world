@@ -21,22 +21,34 @@ export const useRealtimeStore = defineStore('realtime', () => {
   let socket: AppSocket | null = null
   /** The room the user has open: the one to follow, and to reload after a reconnect. */
   let openRoomId: number | null = null
+  /**
+   * True while the server refuses to follow the open room, which it does past its limit for one
+   * connection. The connection stays open, so no reconnect would subscribe again.
+   */
+  const refused = ref(false)
 
   // Polls while live updates can't be relied on to bring everything: before the first
-  // connection, between connections, and while the rooms failed to reload after one.
+  // connection, between connections, while the rooms failed to reload after one, and while the
+  // server refuses to follow the open room.
   const polling = useIntervalFn(refresh, POLL_INTERVAL_MS, { immediate: false })
   watch(
-    [started, status, () => rooms.status],
-    ([isStarted, connection, roomsStatus]) => {
-      if (isStarted && (connection !== 'live' || roomsStatus === 'error')) polling.resume()
-      else polling.pause()
+    [started, status, () => rooms.status, refused],
+    ([isStarted, connection, roomsStatus, isRefused]) => {
+      if (isStarted && (connection !== 'live' || roomsStatus === 'error' || isRefused)) {
+        polling.resume()
+      } else {
+        polling.pause()
+      }
     },
     { flush: 'sync' },
   )
 
   function refresh(): void {
     void rooms.load()
-    if (openRoomId !== null) void messages.load(openRoomId)
+    if (openRoomId === null) return
+    // A refused room asks to be followed again on every tick; subscribing also reloads it (I2).
+    if (status.value === 'live' && refused.value) void subscribeAndLoad(openRoomId)
+    else void messages.load(openRoomId)
   }
 
   /** Opens the app's one connection. Later calls do nothing. */
@@ -61,6 +73,8 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   function onDisconnect(reason: string): void {
     status.value = 'reconnecting'
+    // The next connection starts afresh, and subscribes to the open room again.
+    refused.value = false
     // Socket.IO reconnects by itself, except after the server ended the session on purpose.
     if (reason === 'io server disconnect') socket?.connect()
   }
@@ -68,6 +82,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
   /** Follows a room's messages: subscribes, then loads them (I2). Offline, it only loads. */
   async function openRoom(roomId: number | null): Promise<void> {
     openRoomId = roomId
+    refused.value = false
     if (roomId === null) return
     if (status.value === 'live') await subscribeAndLoad(roomId)
     else await messages.load(roomId)
@@ -75,10 +90,14 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   async function subscribeAndLoad(roomId: number): Promise<void> {
     if (!socket) return
-    // True once the server follows the room for this client. False when it refused, or when the
-    // connection dropped first: then the next connect subscribes again.
+    // True once the server follows the room for this client. False when it refused, which leaves
+    // the polling to subscribe again, or when the connection dropped first: then the next
+    // connect subscribes again.
     const followed = socket.emitWithAck('room:subscribe', { roomId }).then(
-      (reply) => reply.ok,
+      (reply) => {
+        if (openRoomId === roomId) refused.value = !reply.ok
+        return reply.ok
+      },
       () => false,
     )
     const answer = await withDeadline(followed, SUBSCRIBE_TIMEOUT_MS)
