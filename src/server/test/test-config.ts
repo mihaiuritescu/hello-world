@@ -13,6 +13,8 @@ export function testConfig(overrides: Record<string, string> = {}): Config {
     RATE_LIMIT_API_PER_MINUTE: '100000',
     RATE_LIMIT_ROOMS_PER_MINUTE: '100000',
     RATE_LIMIT_MESSAGES_PER_MINUTE: '100000',
+    SOCKETS_PER_ADDRESS: '100000',
+    SUBSCRIPTIONS_PER_MINUTE: '100000',
     ...overrides,
   })
 }

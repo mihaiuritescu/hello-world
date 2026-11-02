@@ -211,3 +211,77 @@ describe('real-time delivery', () => {
     }
   })
 })
+
+describe('real-time limits', () => {
+  let limited: TestApp | undefined
+  const sockets: TestSocket[] = []
+
+  afterEach(async () => {
+    sockets.splice(0).forEach((socket) => socket.disconnect())
+    await limited?.close()
+    limited = undefined
+  })
+
+  /** Starts an app with small limits on a free port, and returns the port. */
+  async function listeningWith(env: Record<string, string>): Promise<number> {
+    limited = await createTestApp(env)
+    await limited.app.listen({ host: '127.0.0.1', port: 0 })
+    return portOf(limited.app)
+  }
+
+  function forwardedFor(address: string) {
+    return { extraHeaders: { 'x-forwarded-for': address } }
+  }
+
+  async function connect(port: number, options: Parameters<typeof connectTo>[1] = {}) {
+    const socket = await connectTo(port, options)
+    sockets.push(socket)
+    return socket
+  }
+
+  it('refuses a connection past the cap for one address, and takes one again once another closes', async () => {
+    const port = await listeningWith({ SOCKETS_PER_ADDRESS: '2' })
+    const [first] = await Promise.all([connect(port), connect(port)])
+
+    await expect(connectTo(port)).rejects.toThrow()
+
+    first.disconnect()
+    // The server learns of the close a moment later.
+    await expect
+      .poll(() =>
+        connect(port).then(
+          () => true,
+          () => false,
+        ),
+      )
+      .toBe(true)
+  })
+
+  it('counts the clients behind a trusted proxy by their forwarded address', async () => {
+    const port = await listeningWith({ TRUST_PROXY: '127.0.0.1', SOCKETS_PER_ADDRESS: '1' })
+    await connect(port, forwardedFor('203.0.113.1'))
+
+    await expect(connectTo(port, forwardedFor('203.0.113.1'))).rejects.toThrow()
+    expect((await connect(port, forwardedFor('203.0.113.2'))).connected).toBe(true)
+  })
+
+  it('ignores X-Forwarded-For from a peer it does not trust, so a client cannot dodge the cap', async () => {
+    const port = await listeningWith({ SOCKETS_PER_ADDRESS: '1' })
+    await connect(port, forwardedFor('203.0.113.1'))
+
+    await expect(connectTo(port, forwardedFor('203.0.113.2'))).rejects.toThrow()
+  })
+
+  it('answers RATE_LIMITED to subscriptions past the limit, and keeps the connection', async () => {
+    const port = await listeningWith({ SUBSCRIPTIONS_PER_MINUTE: '2' })
+    const socket = await connect(port)
+    await socket.emitWithAck('room:subscribe', { roomId: 1 })
+    await socket.emitWithAck('room:subscribe', { roomId: 1 })
+
+    expect(await socket.emitWithAck('room:subscribe', { roomId: 1 })).toEqual({
+      ok: false,
+      error: 'RATE_LIMITED',
+    })
+    expect(socket.connected).toBe(true)
+  })
+})

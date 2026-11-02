@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify'
 import type { Kysely } from 'kysely'
+import { isTrustedProxy } from './client-address.ts'
 import type { Config } from './config.ts'
 import type { Database } from './db/database.ts'
 import { errorBody, registerErrorHandler, tooManyRequests } from './errors.ts'
@@ -41,16 +42,25 @@ export async function buildApp({
   broadcaster,
   logStream,
 }: AppDeps): Promise<FastifyInstance> {
+  const { trustedProxies, rateLimits } = config
   const app = Fastify({
     logger: loggerOptions(config, logStream),
-    trustProxy: config.trustProxy,
+    // Behind a trusted proxy, request.ip is the client's own address, from X-Forwarded-For.
+    trustProxy: trustedProxies ? (address) => isTrustedProxy(trustedProxies, address) : false,
     bodyLimit: 16 * 1024,
     // A client gets this long to send a whole request, so slow senders can't hold sockets open.
     // It doesn't limit responses, long-polls or open WebSockets.
     requestTimeout: 30_000,
   })
 
-  const announcer = broadcaster ?? attachSocketServer(app, { publicHost: config.publicHost })
+  const announcer =
+    broadcaster ??
+    attachSocketServer(app, {
+      publicHost: config.publicHost,
+      trustedProxies,
+      socketsPerAddress: rateLimits.socketsPerAddress,
+      subscriptionsPerMinute: rateLimits.subscriptionsPerMinute,
+    })
 
   registerErrorHandler(app)
   await app.register(helmet, helmetOptions(config))
@@ -58,7 +68,7 @@ export async function buildApp({
   // this get the API-wide limit unless they set their own. Only the API is limited: the health
   // checks, the SPA's files and the WebSocket path are not.
   await app.register(rateLimit, {
-    max: config.rateLimits.apiPerMinute,
+    max: rateLimits.apiPerMinute,
     timeWindow: '1 minute',
     allowList: (request) => !request.url.startsWith('/api/'),
     errorResponseBuilder: (_request, { after }) => tooManyRequests(after),
@@ -68,13 +78,13 @@ export async function buildApp({
   registerRoomRoutes(app, {
     rooms,
     broadcaster: announcer,
-    createsPerMinute: config.rateLimits.roomsPerMinute,
+    createsPerMinute: rateLimits.roomsPerMinute,
   })
   registerMessageRoutes(app, {
     rooms,
     messages: createMessagesRepository(db),
     broadcaster: announcer,
-    sendsPerMinute: config.rateLimits.messagesPerMinute,
+    sendsPerMinute: rateLimits.messagesPerMinute,
   })
 
   if (existsSync(join(CLIENT_DIR, 'index.html'))) {

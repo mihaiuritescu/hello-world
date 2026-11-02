@@ -1,4 +1,6 @@
+import type { BlockList } from 'node:net'
 import { z } from 'zod'
+import { parseTrustedProxies } from './client-address.ts'
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
 
@@ -8,7 +10,18 @@ function envVar<T extends z.ZodType>(schema: T) {
 }
 
 const port = z.coerce.number().int().min(1).max(65_535)
-const perMinute = z.coerce.number().int().min(1)
+const positiveInt = z.coerce.number().int().min(1)
+const proxyList = z.string().refine(
+  (value) => {
+    try {
+      parseTrustedProxies(value)
+      return true
+    } catch {
+      return false
+    }
+  },
+  { message: 'Expected comma-separated IP addresses or subnets, such as 172.30.0.0/24' },
+)
 
 // Every setting has a default that works for a local run, so no .env file is required.
 const EnvSchema = z.object({
@@ -17,7 +30,7 @@ const EnvSchema = z.object({
   PORT: envVar(port.default(3000)),
   LOG_LEVEL: envVar(z.enum(LOG_LEVELS).default('info')),
   PUBLIC_URL: envVar(z.url().optional()),
-  TRUST_PROXY: envVar(z.string().optional()),
+  TRUST_PROXY: envVar(proxyList.optional()),
   DB_HOST: envVar(z.string().default('localhost')),
   DB_PORT: envVar(port.default(3307)),
   DB_USER: envVar(z.string().default('hello_world')),
@@ -26,9 +39,11 @@ const EnvSchema = z.object({
   DB_CA_FILE: envVar(z.string().optional()),
   APP_VERSION: envVar(z.string().default('dev')),
   IMAGE_DIGEST: envVar(z.string().optional()),
-  RATE_LIMIT_API_PER_MINUTE: envVar(perMinute.default(300)),
-  RATE_LIMIT_ROOMS_PER_MINUTE: envVar(perMinute.default(30)),
-  RATE_LIMIT_MESSAGES_PER_MINUTE: envVar(perMinute.default(30)),
+  RATE_LIMIT_API_PER_MINUTE: envVar(positiveInt.default(300)),
+  RATE_LIMIT_ROOMS_PER_MINUTE: envVar(positiveInt.default(30)),
+  RATE_LIMIT_MESSAGES_PER_MINUTE: envVar(positiveInt.default(30)),
+  SOCKETS_PER_ADDRESS: envVar(positiveInt.default(50)),
+  SUBSCRIPTIONS_PER_MINUTE: envVar(positiveInt.default(60)),
 })
 
 export type LogLevel = (typeof LOG_LEVELS)[number]
@@ -43,14 +58,18 @@ export interface DbConfig {
   caFile: string | undefined
 }
 
-/** How many requests one client address may make a minute. */
+/** What one client address may do. */
 export interface RateLimits {
-  /** Any API request. */
+  /** API requests a minute. */
   apiPerMinute: number
-  /** Room creations, which every connected client hears about. */
+  /** Room creations a minute; every connected client hears about each one. */
   roomsPerMinute: number
-  /** Messages sent. */
+  /** Messages sent a minute. */
   messagesPerMinute: number
+  /** WebSocket connections open at once. */
+  socketsPerAddress: number
+  /** Subscriptions a minute, on each connection. */
+  subscriptionsPerMinute: number
 }
 
 export interface Config {
@@ -66,8 +85,11 @@ export interface Config {
    * local runs, where the request's own Host stands in for it.
    */
   publicHost: string | null
-  /** Proxy addresses whose X-Forwarded-* headers are trusted, or false when clients connect directly. */
-  trustProxy: string | false
+  /**
+   * The proxies whose X-Forwarded-For can be trusted, or null when clients connect directly. HTTP
+   * and WebSockets both find a client's address through them.
+   */
+  trustedProxies: BlockList | null
   db: DbConfig
   version: { app: string; image: string | null }
   rateLimits: RateLimits
@@ -87,7 +109,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     prettyLogs: vars.NODE_ENV === 'development',
     isHttps: vars.PUBLIC_URL?.startsWith('https://') ?? false,
     publicHost: vars.PUBLIC_URL ? new URL(vars.PUBLIC_URL).host : null,
-    trustProxy: vars.TRUST_PROXY ?? false,
+    trustedProxies: vars.TRUST_PROXY ? parseTrustedProxies(vars.TRUST_PROXY) : null,
     db: {
       host: vars.DB_HOST,
       port: vars.DB_PORT,
@@ -101,6 +123,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       apiPerMinute: vars.RATE_LIMIT_API_PER_MINUTE,
       roomsPerMinute: vars.RATE_LIMIT_ROOMS_PER_MINUTE,
       messagesPerMinute: vars.RATE_LIMIT_MESSAGES_PER_MINUTE,
+      socketsPerAddress: vars.SOCKETS_PER_ADDRESS,
+      subscriptionsPerMinute: vars.SUBSCRIPTIONS_PER_MINUTE,
     },
   }
 }

@@ -1,14 +1,35 @@
 import type { IncomingMessage } from 'node:http'
+import type { BlockList } from 'node:net'
 import type { Duplex } from 'node:stream'
 import type { ClientToServerEvents, ServerToClientEvents, SubscribeReply } from '#shared/events.ts'
 import { RoomSubscriptionSchema } from '#shared/schemas.ts'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
+import { clientAddress } from '../client-address.ts'
 import type { Broadcaster } from './broadcaster.ts'
 
 type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>
 
+/** The parts of an Engine.IO connection, under each Socket.IO one, that this file uses. */
+interface EngineConnection {
+  request: IncomingMessage
+  once(event: 'close', listener: () => void): void
+}
+
+interface SocketServerOptions {
+  /** See `Config.publicHost`. */
+  publicHost: string | null
+  /** See `Config.trustedProxies`. */
+  trustedProxies: BlockList | null
+  /** Connections one client address may hold open at once. */
+  socketsPerAddress: number
+  /** Subscriptions one connection may send a minute. */
+  subscriptionsPerMinute: number
+}
+
 const ROOM_CHANNEL_PREFIX = 'room:'
+const MINUTE_MS = 60_000
+const RATE_LIMITED: SubscribeReply = { ok: false, error: 'RATE_LIMITED' }
 
 /** The channel of the clients that have a room open. */
 function roomChannel(roomId: number): string {
@@ -22,8 +43,13 @@ function roomChannel(roomId: number): string {
  */
 export function attachSocketServer(
   app: FastifyInstance,
-  { publicHost }: { publicHost: string | null },
+  { publicHost, trustedProxies, socketsPerAddress, subscriptionsPerMinute }: SocketServerOptions,
 ): Broadcaster {
+  // Open connections per client address. Engine.IO answers WebSocket handshakes before Fastify
+  // sees them, so the HTTP rate limits don't cover sockets. Past the cap, handshakes are refused:
+  // the client keeps trying with its backoff, and polls over HTTP meanwhile.
+  const openByAddress = new Map<string, number>()
+
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
     // WebSocket only, without long-polling, so a load balancer in front needs no sticky sessions.
     transports: ['websocket'],
@@ -31,8 +57,19 @@ export function attachSocketServer(
     // Clients send nothing but subscriptions: the HTTP body limit is plenty.
     maxHttpBufferSize: 16 * 1024,
     allowRequest: (request, accept) => {
-      accept(null, isOwnOrigin(request, publicHost))
+      const open = openByAddress.get(clientAddress(request, trustedProxies)) ?? 0
+      accept(null, isOwnOrigin(request, publicHost) && open < socketsPerAddress)
     },
+  })
+
+  io.engine.on('connection', (connection: EngineConnection) => {
+    const address = clientAddress(connection.request, trustedProxies)
+    openByAddress.set(address, (openByAddress.get(address) ?? 0) + 1)
+    connection.once('close', () => {
+      const open = (openByAddress.get(address) ?? 1) - 1
+      if (open > 0) openByAddress.set(address, open)
+      else openByAddress.delete(address)
+    })
   })
 
   // The raw connections under the WebSockets, so shutdown can cut off clients that never answer.
@@ -43,6 +80,7 @@ export function attachSocketServer(
   })
 
   io.on('connection', (socket) => {
+    limitEvents(socket, subscriptionsPerMinute)
     // Both arguments come straight from the client: the answer may be missing, or not a function.
     socket.on('room:subscribe', (subscription: unknown, answer: unknown) => {
       const parsed = RoomSubscriptionSchema.safeParse(subscription)
@@ -92,6 +130,30 @@ function isOwnOrigin(request: IncomingMessage, publicHost: string | null): boole
     // Not a URL, such as the "null" origin of a sandboxed page.
     return false
   }
+}
+
+/**
+ * Caps the events a connection sends, in fixed one-minute windows; clients send nothing but
+ * subscriptions. An event past the cap gets RATE_LIMITED as its answer and goes no further. The
+ * connection stays open: after a server disconnect, the client would reconnect at once, in a loop.
+ */
+function limitEvents(socket: ClientSocket, perMinute: number): void {
+  let windowStart = Date.now()
+  let count = 0
+  socket.use((event, next) => {
+    const now = Date.now()
+    if (now - windowStart >= MINUTE_MS) {
+      windowStart = now
+      count = 0
+    }
+    count += 1
+    if (count <= perMinute) {
+      next()
+      return
+    }
+    const answer: unknown = event.at(-1)
+    if (typeof answer === 'function') (answer as (reply: SubscribeReply) => void)(RATE_LIMITED)
+  })
 }
 
 /**
