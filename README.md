@@ -2,7 +2,7 @@
 
 A real-time chat on a world map: click anywhere to drop a pin, open its chatroom, and talk to whoever else is there. Built for the Wolfpack Digital full-stack test.
 
-> **Status:** rooms, messages and live updates work, and everything persists. The AWS demo is ready to deploy from [the runbook](infra/aws/RUNBOOK.md); hardening comes next. See the [PRD](docs/PRD.md) for the plan.
+> **Status:** rooms, messages and live updates work, everything persists, and each client has rate limits. The AWS demo is ready to deploy from [the runbook](infra/aws/RUNBOOK.md); the self-review comes next. See the [PRD](docs/PRD.md) for the plan.
 
 ## Using it
 
@@ -59,6 +59,32 @@ Before the first end-to-end run, install the browsers with `pnpm exec playwright
 
 Every setting has a working default for local runs, so no `.env` file is needed. To change one, copy [`.env.example`](.env.example) to `.env` and uncomment the setting. Docker Compose also reads `PORT` and `DB_PORT` from `.env` as the host ports it publishes.
 
+## Testing
+
+| Level | Tools | What it proves |
+|---|---|---|
+| Unit | Vitest, jsdom, Vue Test Utils | Stores (duplicates dropped, order by id, retries reusing one `clientId`), schemas, helpers and components |
+| Integration | Vitest against MySQL | Every route through `app.inject()`, rate limits, migrations, and Socket.IO delivery and caps on a real port |
+| End-to-end | Playwright: Chromium for all tests, WebKit for the `@smoke` ones | FR-1 to FR-6 in a real browser, two windows for real time, and axe WCAG 2.2 AA scans of each screen and error state |
+
+- `pnpm test` runs the unit and integration tests, with MySQL running (`pnpm db:up`).
+- `pnpm test:e2e` runs the end-to-end tests against the production build, on their own database, with the map tiles stubbed.
+- Integration tests reset the tables between tests, and no test sleeps: each waits for an event, a response or the page.
+
+## Architecture
+
+```
+browser ──HTTP──► Fastify: the built SPA and the REST API ──► MySQL 8.4
+        ◄──WS───  Socket.IO: room:created, message:created
+```
+
+- **One process, one origin.** One Node process serves the SPA, the REST API and the WebSocket, so there's no CORS, and one image runs everywhere.
+- **Writes go over REST.** Only after the database commit does the server announce them over Socket.IO, to everyone or to the room's channel.
+- **One data path on the client.** Pinia stores hold all server data. HTTP responses and socket events go through the same upsert, which drops duplicates and orders by id.
+- **Subscribe, then read.** Opening a room subscribes, then loads its messages; a reconnect does both again. Without a socket, the client polls every 10 seconds.
+
+The [PRD](docs/PRD.md) has the decisions and the invariants behind them.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -67,6 +93,7 @@ Every setting has a working default for local runs, so no `.env` file is needed.
 | `Cannot reach MySQL` | Start Docker, then run `pnpm db:up` |
 | `corepack enable` fails with `EPERM` on Windows | Run it once from an Administrator terminal, or install pnpm with `npm install -g pnpm@11.28.9` |
 | Tests fail on a missing `hello_world_test` database | The test databases are created when MySQL first initialises. Run `docker compose down -v`, then `pnpm db:up` |
+| "You're creating chatrooms too fast" or "sending messages too fast" | A rate limit: wait a minute. For local load tests, raise the limits in `.env` (see `.env.example`) |
 
 ## Deployment
 
@@ -77,7 +104,28 @@ The demo deploys to AWS: one EC2 instance behind Caddy and Let's Encrypt, with R
 - [Technical PRD](docs/PRD.md): requirements and up-front technical decisions.
 - [Infrastructure and costs](docs/INFRASTRUCTURE.md): how the app runs on AWS, and what staging and production cost.
 - [AWS runbook](infra/aws/RUNBOOK.md): every step to deploy, check and tear down the demo.
-- [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md): the rules and context given to AI coding tools.
+- [AI setup](docs/AI-SETUP.md): how AI coding tools were used, and how to reproduce it. [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md) hold the rules they follow.
+- [Self-review](docs/review/README.md): the review configuration and its results, with [REVIEW.md](REVIEW.md) as the guide.
+
+## Beyond the brief
+
+- **Real time,** the brief's optional part: other windows see new pins and messages within a second, and catch up after a lost connection. A chip shows whether the connection is live.
+- **Duplicate-safe sending:** sending a failed message again never stores it twice.
+- **Deep links** (`?room=3`) and a remembered name.
+- **Keyboard access:** Enter on the focused map creates a room, and Enter on a pin opens it. axe scans every screen in CI.
+- **Loading, empty and error states,** with Retry.
+- **Rate limits per client,** on the API and on the WebSockets.
+- **A live AWS demo,** with HTTPS, from one CloudFormation stack, and a cost estimate for staging and production.
+- **A multi-agent self-review,** with its report and triage.
+
+## Limitations
+
+- **Anyone can post under any name:** there are no accounts, by design for v1.
+- **No moderation:** rate and length limits are the only protection against spam.
+- **Rate limits count by IP address,** so people behind one address share them.
+- **One server instance.** The way to scale out, with a load balancer and a shared Socket.IO adapter, is in [Infrastructure and costs](docs/INFRASTRUCTURE.md).
+- **Partial history:** a room opens on its latest 100 messages, with no paging back, and the map shows the 1,000 newest rooms.
+- **Best-effort map tiles:** OpenStreetMap's public tiles have no service-level guarantee.
 
 ## Licence
 
