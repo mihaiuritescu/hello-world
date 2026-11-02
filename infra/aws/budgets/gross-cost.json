@@ -1,0 +1,7 @@
+{
+  "BudgetName": "hello-world-gross-cost",
+  "BudgetType": "COST",
+  "TimeUnit": "MONTHLY",
+  "BudgetLimit": { "Amount": "30", "Unit": "USD" },
+  "CostTypes": { "IncludeCredit": false, "IncludeRefund": false }
+}

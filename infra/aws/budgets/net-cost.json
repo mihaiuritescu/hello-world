@@ -1,0 +1,7 @@
+{
+  "BudgetName": "hello-world-net-cost",
+  "BudgetType": "COST",
+  "TimeUnit": "MONTHLY",
+  "BudgetLimit": { "Amount": "1", "Unit": "USD" },
+  "CostTypes": { "IncludeCredit": true, "IncludeRefund": true }
+}

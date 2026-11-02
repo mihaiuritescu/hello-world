@@ -2,7 +2,7 @@
 
 A real-time chat on a world map: click anywhere to drop a pin, open its chatroom, and talk to whoever else is there. Built for the Wolfpack Digital full-stack test.
 
-> **Status:** rooms, messages and live updates work, and everything persists. Hardening and the AWS demo come next. See the [PRD](docs/PRD.md) for the plan.
+> **Status:** rooms, messages and live updates work, and everything persists. The AWS demo is ready to deploy from [the runbook](infra/aws/RUNBOOK.md); hardening comes next. See the [PRD](docs/PRD.md) for the plan.
 
 ## Using it
 
@@ -68,9 +68,15 @@ Every setting has a working default for local runs, so no `.env` file is needed.
 | `corepack enable` fails with `EPERM` on Windows | Run it once from an Administrator terminal, or install pnpm with `npm install -g pnpm@11.28.9` |
 | Tests fail on a missing `hello_world_test` database | The test databases are created when MySQL first initialises. Run `docker compose down -v`, then `pnpm db:up` |
 
+## Deployment
+
+The demo deploys to AWS: one EC2 instance behind Caddy and Let's Encrypt, with RDS for MySQL, from a single CloudFormation stack. [The runbook](infra/aws/RUNBOOK.md) gives every step, from the first check to the teardown, and [Infrastructure and costs](docs/INFRASTRUCTURE.md) covers the architecture and the monthly cost of staging and production.
+
 ## Documentation
 
 - [Technical PRD](docs/PRD.md): requirements and up-front technical decisions.
+- [Infrastructure and costs](docs/INFRASTRUCTURE.md): how the app runs on AWS, and what staging and production cost.
+- [AWS runbook](infra/aws/RUNBOOK.md): every step to deploy, check and tear down the demo.
 - [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md): the rules and context given to AI coding tools.
 
 ## Licence
