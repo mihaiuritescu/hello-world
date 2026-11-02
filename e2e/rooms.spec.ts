@@ -31,6 +31,63 @@ async function holdNextRoomCreate(page: Page): Promise<() => void> {
   return release
 }
 
+/** The body the server sends when a client goes over a rate limit. */
+const RATE_LIMITED = {
+  statusCode: 429,
+  error: 'Too Many Requests',
+  message: 'Too many requests. Try again in 1 minute.',
+  code: 'RATE_LIMITED',
+}
+
+const SERVER_ERROR = {
+  statusCode: 500,
+  error: 'Internal Server Error',
+  message: 'Something went wrong. Please try again.',
+  code: 'INTERNAL_ERROR',
+}
+
+test.describe('rooms, when something goes wrong', () => {
+  // Chromium logs every failed request as a console error.
+  test.use({ allowedConsoleErrors: [/Failed to load resource/] })
+
+  test('creating chatrooms too fast asks the user to slow down', async ({ page }) => {
+    await page.route('**/api/rooms', (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({ status: 429, json: RATE_LIMITED })
+        : route.continue(),
+    )
+    await page.goto('/')
+
+    await map(page).click({ position: WEST })
+
+    await expect(
+      page.getByText("You're creating chatrooms too fast. Wait a minute, then try again."),
+    ).toBeVisible()
+    await expect(page.getByText('Click on the map to start a chat')).toBeVisible()
+  })
+
+  test('a link to a chatroom that does not exist says so, and shows the start screen', async ({
+    page,
+  }) => {
+    await page.goto('/?room=42')
+
+    await expect(page.getByText("Chatroom 42 doesn't exist.")).toBeVisible()
+    await expect(page).not.toHaveURL(/room=/)
+    await expect(page.getByText('Click on the map to start a chat')).toBeVisible()
+  })
+
+  test('when the chatrooms fail to load, the start panel says so and offers Retry', async ({
+    page,
+  }) => {
+    await page.route('**/api/rooms', (route) => route.fulfill({ status: 500, json: SERVER_ERROR }))
+
+    await page.goto('/')
+
+    await expect(page.getByRole('alert')).toHaveText("Couldn't load the chatrooms.")
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible()
+  })
+})
+
 test.describe('rooms (FR-2, FR-3, FR-5)', () => {
   test('a click on the map drops a pin and opens its room @smoke', async ({ page }) => {
     await page.goto('/')

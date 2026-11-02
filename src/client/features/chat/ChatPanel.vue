@@ -4,6 +4,7 @@ import { computed, nextTick, useTemplateRef, watch } from 'vue'
 import { roomTitle } from '../../lib/roomTitle.ts'
 import { useMessagesStore } from '../../stores/messages.ts'
 import { useRealtimeStore } from '../../stores/realtime.ts'
+import { useRoomsStore } from '../../stores/rooms.ts'
 import ConnectionChip from './ConnectionChip.vue'
 import MessageComposer from './MessageComposer.vue'
 import MessageList from './MessageList.vue'
@@ -11,6 +12,7 @@ import MessageList from './MessageList.vue'
 const props = defineProps<{ room: Room | null }>()
 const messages = useMessagesStore()
 const realtime = useRealtimeStore()
+const rooms = useRoomsStore()
 const list = useTemplateRef<InstanceType<typeof MessageList>>('list')
 
 const roomMessages = computed(() => (props.room ? messages.listFor(props.room.id) : []))
@@ -18,6 +20,11 @@ const status = computed(() => (props.room ? messages.statusOf(props.room.id) : '
 
 function loadMessages(): void {
   if (props.room) void messages.load(props.room.id)
+}
+
+// The list also loads again by itself every few seconds while it can't; Retry needn't wait.
+function loadRooms(): void {
+  void rooms.load()
 }
 
 // Opening a room follows it live, and loads its messages each time it opens: others may have
@@ -56,6 +63,10 @@ async function showSentMessage(): Promise<void> {
     <v-card-text v-else>
       <p class="text-body-1">Click on the map to start a chat</p>
       <p class="text-body-2 text-medium-emphasis">or focus the map and press Enter</p>
+      <div v-if="rooms.status === 'error'" class="mt-4">
+        <p role="alert" class="mb-2">Couldn't load the chatrooms.</p>
+        <v-btn variant="tonal" @click="loadRooms">Retry</v-btn>
+      </div>
     </v-card-text>
   </v-card>
 </template>

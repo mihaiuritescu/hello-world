@@ -38,4 +38,42 @@ test.describe('accessibility', () => {
 
     expect(results.violations).toEqual([])
   })
+
+  test.describe('error states', () => {
+    // Chromium logs every failed request as a console error.
+    test.use({ allowedConsoleErrors: [/Failed to load resource/] })
+
+    const serverError = {
+      status: 500,
+      json: {
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: 'Something went wrong. Please try again.',
+        code: 'INTERNAL_ERROR',
+      },
+    }
+
+    test('a room list that failed to load has no detectable WCAG violations', async ({ page }) => {
+      await page.route('**/api/rooms', (route) => route.fulfill(serverError))
+      await page.goto('/')
+      await expect(page.getByRole('alert')).toHaveText("Couldn't load the chatrooms.")
+
+      const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+
+      expect(results.violations).toEqual([])
+    })
+
+    test("a room whose messages didn't load has no detectable WCAG violations", async ({
+      page,
+    }) => {
+      await seedRooms(1)
+      await page.route('**/api/rooms/1/messages', (route) => route.fulfill(serverError))
+      await page.goto('/?room=1')
+      await expect(page.getByRole('alert')).toHaveText("Couldn't load the messages.")
+
+      const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+
+      expect(results.violations).toEqual([])
+    })
+  })
 })

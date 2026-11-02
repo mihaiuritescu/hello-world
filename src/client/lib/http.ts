@@ -11,6 +11,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Whether a call failed because this client went over one of the server's rate limits. */
+export function isRateLimited(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 429
+}
+
 interface RequestOptions {
   method?: 'GET' | 'POST'
   body?: unknown

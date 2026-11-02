@@ -3,6 +3,8 @@ import type { Coordinates } from '#shared/schemas.ts'
 import { computed, onMounted, ref } from 'vue'
 import ChatPanel from './features/chat/ChatPanel.vue'
 import ChatMap from './features/map/ChatMap.vue'
+import { isRateLimited } from './lib/http.ts'
+import { roomTitle } from './lib/roomTitle.ts'
 import { useRealtimeStore } from './stores/realtime.ts'
 import { useRoomsStore } from './stores/rooms.ts'
 import { useSessionStore } from './stores/session.ts'
@@ -22,9 +24,23 @@ onMounted(async () => {
   // covers anything created between this load and the connection.
   realtime.connect()
   await rooms.load()
-  // A link can name a room older than the ones the list holds.
-  if (session.selectedRoomId !== null) await rooms.ensureLoaded(session.selectedRoomId)
+  if (session.selectedRoomId !== null) await openLinkedRoom(session.selectedRoomId)
 })
+
+/** Opens the room a link names: it may be older than the rooms the list holds, or not exist. */
+async function openLinkedRoom(roomId: number): Promise<void> {
+  try {
+    await rooms.ensureLoaded(roomId)
+  } catch {
+    errorMessage.value = `Couldn't open ${roomTitle({ id: roomId })}. Please reload the page.`
+    return
+  }
+  // Unless the user has already picked another room, a link to no room leaves the start screen.
+  if (!rooms.byId.has(roomId) && session.selectedRoomId === roomId) {
+    errorMessage.value = `${roomTitle({ id: roomId })} doesn't exist.`
+    session.selectRoom(null)
+  }
+}
 
 // Every choice the user makes (a new room, or a pin) supersedes the earlier ones, so a slow
 // create can't take over the panel after the user has picked something else.
@@ -42,8 +58,10 @@ function createRoomAt(coordinates: Coordinates): void {
     .then((room) => {
       if (choice === latestChoice) session.selectRoom(room.id)
     })
-    .catch(() => {
-      errorMessage.value = "Couldn't create the chatroom. Please try again."
+    .catch((error: unknown) => {
+      errorMessage.value = isRateLimited(error)
+        ? "You're creating chatrooms too fast. Wait a minute, then try again."
+        : "Couldn't create the chatroom. Please try again."
     })
 }
 </script>

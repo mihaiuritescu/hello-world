@@ -6,6 +6,7 @@ import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { requestJson } from '../../lib/http.ts'
 import { createAppVuetify } from '../../plugins/vuetify.ts'
+import { useRoomsStore } from '../../stores/rooms.ts'
 import { deferred } from '../../test/deferred.ts'
 import ChatPanel from './ChatPanel.vue'
 
@@ -52,6 +53,23 @@ describe('ChatPanel', () => {
     expect(panel).toHaveTextContent('Click on the map to start a chat')
     expect(panel).toHaveTextContent('or focus the map and press Enter')
     expect(requestJsonMock).not.toHaveBeenCalled()
+  })
+
+  it("says when the chatrooms didn't load, and Retry loads them again", async () => {
+    requestJsonMock
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ rooms: [room(1)] })
+    const { screen } = renderPanel(null)
+    const rooms = useRoomsStore()
+    await rooms.load()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the chatrooms.")
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await flushPromises()
+
+    expect(rooms.list).toEqual([room(1)])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows the open room as "Chatroom N"', () => {

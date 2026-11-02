@@ -1,6 +1,7 @@
 import type { MessageDraft } from '#shared/schemas.ts'
 import { defineStore } from 'pinia'
 import { reactive, ref } from 'vue'
+import { isRateLimited } from '../lib/http.ts'
 import { randomId } from '../lib/randomId.ts'
 import { useMessagesStore } from './messages.ts'
 
@@ -52,8 +53,10 @@ export const useDraftsStore = defineStore('drafts', () => {
       // Text typed while the message was on its way stays in the field.
       if (draft.text.trim() === body) draft.text = ''
       return true
-    } catch {
-      draft.error = "Couldn't send the message. Please try again."
+    } catch (error) {
+      draft.error = isRateLimited(error)
+        ? "You're sending messages too fast. Wait a moment, then try again."
+        : "Couldn't send the message. Please try again."
       return false
     } finally {
       draft.sending = false

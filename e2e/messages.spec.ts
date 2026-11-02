@@ -131,6 +131,34 @@ test.describe('messages (FR-4, FR-5)', () => {
     expect(await overlap(panel, attribution)).toBe(false)
   })
 
+  test.describe('when the server limits sends', () => {
+    test.use({ allowedConsoleErrors: [/Failed to load resource/] })
+
+    test('sending too fast asks the user to slow down, and keeps the draft', async ({ page }) => {
+      await openNewRoom(page)
+      await page.route('**/api/rooms/*/messages', (route) =>
+        route.request().method() === 'POST'
+          ? route.fulfill({
+              status: 429,
+              json: {
+                statusCode: 429,
+                error: 'Too Many Requests',
+                message: 'Too many requests. Try again in 1 minute.',
+                code: 'RATE_LIMITED',
+              },
+            })
+          : route.continue(),
+      )
+
+      await post(page, 'Alice', 'Too fast')
+
+      await expect(
+        page.getByText("You're sending messages too fast. Wait a moment, then try again."),
+      ).toBeVisible()
+      await expect(messageField(page)).toHaveValue('Too fast')
+    })
+  })
+
   test.describe('when a response is lost', () => {
     test.use({ allowedConsoleErrors: [/Failed to load resource/] })
 

@@ -2,7 +2,7 @@ import type { Message } from '#shared/domain.ts'
 import type { MessageDraft } from '#shared/schemas.ts'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { requestJson } from '../lib/http.ts'
+import { ApiError, requestJson } from '../lib/http.ts'
 import { deferred } from '../test/deferred.ts'
 import { useDraftsStore } from './drafts.ts'
 import { useMessagesStore } from './messages.ts'
@@ -50,6 +50,20 @@ describe('drafts store', () => {
     ])
     expect(draft.text).toBe('')
     expect(useMessagesStore().listFor(1)).toEqual([stored(1)])
+  })
+
+  it('asks the user to slow down when the server limits sends, and keeps the draft', async () => {
+    requestJsonMock.mockRejectedValueOnce(
+      new ApiError(429, 'RATE_LIMITED', 'Too many requests. Try again in 1 minute.'),
+    )
+    const drafts = useDraftsStore()
+    const draft = drafts.draftFor(1)
+    draft.text = 'Hello'
+
+    expect(await drafts.send(1, 'Alice')).toBe(false)
+
+    expect(draft.error).toBe("You're sending messages too fast. Wait a moment, then try again.")
+    expect(draft.text).toBe('Hello')
   })
 
   it('keeps a failed draft with an error, and sends it again with the same clientId (I3)', async () => {
