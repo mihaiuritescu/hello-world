@@ -1,7 +1,13 @@
 // Unit and integration tests for both client and server code.
 {
   "extends": "./tsconfig.app.json",
-  "include": ["env.d.ts", "src/**/*.test.ts", "src/client/test/**/*", "src/server/test/**/*"],
+  "include": [
+    "env.d.ts",
+    "src/**/*.test.ts",
+    "src/client/test/**/*",
+    "src/server/test/**/*",
+    "scripts/**/*.test.ts"
+  ],
   "exclude": [],
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable"],

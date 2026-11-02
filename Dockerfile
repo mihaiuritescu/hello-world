@@ -30,6 +30,8 @@ COPY src/server ./src/server
 COPY src/shared ./src/shared
 # The RDS CA bundle: with DB_CA_FILE pointing here, the app verifies the database's certificate.
 COPY certs ./certs
+# The AWS demo host's deploy files travel with the image they deploy (infra/aws/RUNBOOK.md).
+COPY deploy/aws ./deploy/aws
 COPY --from=build /app/dist/client ./dist/client
 ARG GIT_SHA=dev
 ENV APP_VERSION=$GIT_SHA

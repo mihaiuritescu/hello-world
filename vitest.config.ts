@@ -24,7 +24,7 @@ export default mergeConfig(
           test: {
             name: 'server',
             environment: 'node',
-            include: ['src/server/**/*.test.ts'],
+            include: ['src/server/**/*.test.ts', 'scripts/**/*.test.ts'],
             globalSetup: ['src/server/test/global-setup.ts'],
             // Integration tests share one MySQL database, so test files run one at a time.
             fileParallelism: false,

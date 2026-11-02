@@ -3,7 +3,7 @@
 {
   "extends": "@tsconfig/node24/tsconfig.json",
   "include": ["src/server/**/*", "src/shared/**/*", "scripts/**/*"],
-  "exclude": ["src/**/*.test.ts", "src/server/test/**"],
+  "exclude": ["src/**/*.test.ts", "src/server/test/**", "scripts/**/*.test.ts"],
   "compilerOptions": {
     "module": "nodenext",
     "moduleResolution": "nodenext",

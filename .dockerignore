@@ -11,6 +11,5 @@ playwright-report
 test-results
 docs
 infra
-deploy
 docker
 *.md

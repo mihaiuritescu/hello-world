@@ -1,0 +1,71 @@
+# The demo host's stack, in /opt/hello-world on the EC2 instance: Caddy terminates HTTPS in front
+# of the app, and `migrate` runs once per deploy. deploy.sh writes app.env for the app, and .env
+# with IMAGE, SITE_ADDRESS, AWS_REGION, LOG_GROUP and CADDYFILE_SHA256 for this file.
+name: hello-world
+
+# Every container logs to CloudWatch, one stream per container. Docker's log driver runs on the
+# host, so it uses the instance role.
+x-logging: &logging
+  driver: awslogs
+  options:
+    awslogs-region: ${AWS_REGION}
+    awslogs-group: ${LOG_GROUP}
+    tag: '{{.Name}}'
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    # Caddy reads its file only when it starts. A new checksum here makes Compose recreate it.
+    labels:
+      hello-world.caddyfile-sha256: ${CADDYFILE_SHA256}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates survive redeploys, which keeps clear of Let's Encrypt's rate limits.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+  app:
+    # Pinned by digest, as the CI publish job prints it.
+    image: ${IMAGE}
+    restart: unless-stopped
+    env_file: app.env
+    environment:
+      # Caddy reaches the app from this network, so its X-Forwarded-For can be trusted.
+      TRUST_PROXY: 172.30.0.0/24
+    mem_limit: 384m
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/readyz']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging: *logging
+
+  # One-off: `docker compose run --rm migrate`. The profile keeps `up` from starting it.
+  migrate:
+    image: ${IMAGE}
+    command: ['node', 'src/server/migrate.ts']
+    env_file: app.env
+    restart: 'no'
+    profiles: [tools]
+    logging: *logging
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,412 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Hello World demo: one EC2 instance runs Caddy and the app with Docker Compose, in front of a
+  private RDS MySQL 8.4 database. Deleting the stack deletes everything in it. Deploys go through
+  the stack's SSM document; see infra/aws/RUNBOOK.md.
+
+Parameters:
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: >-
+      Amazon Linux 2023 arm64 AMI, resolved once with the runbook, so that a stack update never
+      replaces the instance by surprise.
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues: [t4g.micro, t4g.small]
+    Description: Graviton (arm64) only, since the image is built for arm64.
+  DbEngineVersion:
+    Type: String
+    AllowedPattern: '^8\.4\.\d+$'
+    Description: An exact MySQL 8.4 version offered in the Region, resolved with the runbook.
+  DbBackupRetentionDays:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 7
+    Description: Days of automated backups. The AWS Free plan allows 1; a Paid plan up to 7 here.
+  SiteAddress:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
+    Description: >-
+      A domain that points at the Elastic IP. Leave it empty to use <ip-with-dashes>.sslip.io.
+  GitHubRepository:
+    Type: String
+    Default: mihaiuritescu/hello-world
+    # No dots: the deploy document puts this into a regular expression.
+    AllowedPattern: '^[a-z0-9-]+/[a-z0-9_-]+$'
+    Description: >-
+      The owner/name repository, in lower case, whose GHCR images deploys accept. Only that
+      repository's owner and workflows can push there.
+
+Conditions:
+  HasSiteAddress: !Not [!Equals [!Ref SiteAddress, '']]
+
+Resources:
+  # Network: one public subnet for the instance, two private ones for the database (RDS asks for
+  # two Availability Zones). There is no NAT gateway: the database never reaches the internet.
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTP and HTTPS from anywhere. No SSH; shell access goes through SSM.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: HTTP, which Caddy redirects to HTTPS and uses for certificates
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - Description: HTTPS, for the app and its WebSockets
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MySQL from the app instance only.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: MySQL from the app instance
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+
+  # Database: MySQL 8.4 on the smallest Graviton class, private, encrypted, TLS only.
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets, with no route to the internet.
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  DbParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Refuses connections that don't use TLS.
+      Family: mysql8.4
+      Parameters:
+        require_secure_transport: '1'
+
+  # The generated password has no punctuation: RDS refuses some symbols, and the deploy script
+  # quotes values in a shell-style env file.
+  DbSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: Hello World database credentials. Deploys copy them into a root-only file.
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"hello_world"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Engine: mysql
+      EngineVersion: !Ref DbEngineVersion
+      # Avoids RDS Extended Support charges once 8.4 reaches the end of standard support.
+      EngineLifecycleSupport: open-source-rds-extended-support-disabled
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: '20'
+      StorageType: gp3
+      StorageEncrypted: true
+      MultiAZ: false
+      # The instance's zone: no cross-zone traffic between the app and its database.
+      AvailabilityZone: !GetAtt PublicSubnet.AvailabilityZone
+      PubliclyAccessible: false
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSecurityGroup
+      DBParameterGroupName: !Ref DbParameterGroup
+      DBName: hello_world
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbSecret}:SecretString:password}}'
+      BackupRetentionPeriod: !Ref DbBackupRetentionDays
+      DeleteAutomatedBackups: true
+      DeletionProtection: false
+      AutoMinorVersionUpgrade: true
+
+  # Adds the database's host and port to the secret, next to the credentials.
+  DbSecretAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref DbSecret
+      TargetId: !Ref Database
+      TargetType: AWS::RDS::DBInstance
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub '/${AWS::StackName}'
+      RetentionInDays: 7
+
+  # The instance can be managed through SSM, read its own database secret and write its own logs.
+  # One exception to least privilege: AWS's managed SSM policy also lets it read every SSM
+  # parameter in the account, so the demo account keeps no secrets in Parameter Store.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: The Hello World demo instance.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+      Policies:
+        - PolicyName: app
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadTheDatabaseSecret
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref DbSecret
+              - Sid: WriteContainerLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroup.Arn
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # IMDSv2 only, one hop: containers can't reach the instance's credentials, while Docker's own
+  # log driver, which runs on the host, still can.
+  InstanceLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+
+  Instance:
+    Type: AWS::EC2::Instance
+    # The first boot downloads Docker and Compose, so the subnet must reach the internet by then.
+    DependsOn: [PublicDefaultRoute, PublicSubnetRouteTableAssociation]
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref InstanceLaunchTemplate
+        Version: !GetAtt InstanceLaunchTemplate.LatestVersionNumber
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref AppSecurityGroup
+      IamInstanceProfile: !Ref InstanceProfile
+      CreditSpecification:
+        CPUCredits: standard
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+      # First boot: Docker with the Compose plugin, jq for the deploy script, and swap. Running it
+      # again is safe; the runbook does that when a first boot failed.
+      UserData: !Base64 |
+        #!/bin/bash
+        set -euxo pipefail
+
+        # dnf retries a failed download, but not when the Elastic IP swap cuts every connection.
+        for attempt in 1 2 3; do
+          dnf install -y docker jq && break
+          [ "$attempt" -lt 3 ] || exit 1
+          sleep 15
+        done
+        systemctl enable --now docker
+
+        # The Compose plugin, installed only once it matches the checksum published with its
+        # release, so a bad download never replaces a good plugin. The retries ride out the
+        # moment the Elastic IP replaces the launch-time public IP.
+        download=$(mktemp)
+        trap 'rm -f "$download"' EXIT
+        curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 \
+          --retry 5 --retry-all-errors --output "$download" \
+          https://github.com/docker/compose/releases/download/v5.6.1/docker-compose-linux-aarch64
+        echo "42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d  $download" \
+          | sha256sum --check
+        install -D --mode 755 "$download" /usr/local/lib/docker/cli-plugins/docker-compose
+
+        # Headroom for the 2 GiB instance while it pulls and starts images.
+        if ! swapon --show=NAME --noheadings | grep --quiet --line-regexp /swapfile; then
+          fallocate --length 1G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+        fi
+        grep --quiet '^/swapfile ' /etc/fstab || echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+
+        mkdir -p /opt/hello-world
+
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+  ElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ElasticIp.AllocationId
+      InstanceId: !Ref Instance
+
+  # Runs one deploy on the instance. The parameter has a strict pattern, because SSM pastes it into
+  # the shell script as it is.
+  DeployDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: !Sub '${AWS::StackName}-deploy'
+      DocumentType: Command
+      UpdateMethod: NewVersion
+      Content:
+        schemaVersion: '2.2'
+        description: Deploys one image of the app, with the deploy files the image carries.
+        parameters:
+          ImageDigest:
+            type: String
+            description: The image pinned by its digest, as the CI publish job prints it.
+            allowedPattern: !Sub '^ghcr\.io/${GitHubRepository}@sha256:[a-f0-9]{64}$'
+        mainSteps:
+          - action: aws:runShellScript
+            name: deploy
+            inputs:
+              timeoutSeconds: '900'
+              runCommand:
+                - set -euo pipefail
+                # A deploy sent right after the stack is created waits for the first boot. The wait
+                # also exits non-zero on mere warnings, so the next line checks what's needed.
+                - cloud-init status --wait > /dev/null || true
+                - >-
+                  docker compose version > /dev/null || { echo 'Docker Compose is missing, so the
+                  first boot failed. See "Logs and troubleshooting" in the runbook.' >&2; exit 1; }
+                - mkdir -p /opt/hello-world
+                - cd /opt/hello-world
+                # The deploy files come out of the image itself, so they always match it.
+                - docker pull --quiet '{{ImageDigest}}'
+                - container=$(docker create '{{ImageDigest}}')
+                - trap 'docker rm "$container" > /dev/null' EXIT
+                - docker cp "$container:/app/deploy/aws/." .
+                - !Sub
+                  - >-
+                    AWS_REGION=${AWS::Region} DB_SECRET_ID=${DbSecret} LOG_GROUP=${LogGroup}
+                    SITE_ADDRESS=${Site} bash deploy.sh '{{ImageDigest}}'
+                  - Site: !If
+                      - HasSiteAddress
+                      - !Ref SiteAddress
+                      - !Join [
+                          '',
+                          [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.sslip.io'],
+                        ]
+
+Outputs:
+  SiteUrl:
+    Description: The demo.
+    Value: !Sub
+      - 'https://${Site}'
+      - Site: !If
+          - HasSiteAddress
+          - !Ref SiteAddress
+          - !Join ['', [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.sslip.io']]
+  ElasticIp:
+    Description: The instance's public address.
+    Value: !GetAtt ElasticIp.PublicIp
+  InstanceId:
+    Description: The instance that deploys run on.
+    Value: !Ref Instance
+  DeployDocument:
+    Description: The SSM document that deploys an image.
+    Value: !Ref DeployDocument
+  LogGroup:
+    Description: The CloudWatch log group of the containers.
+    Value: !Ref LogGroup
+  DbEndpoint:
+    Description: The database's private address, reachable from the instance only.
+    Value: !GetAtt Database.Endpoint.Address
