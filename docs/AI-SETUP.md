@@ -20,6 +20,7 @@ How this project uses AI coding tools, and how to reproduce it. The rules themse
 | [`.claude/settings.json`](../.claude/settings.json) | Permissions. **Allowed:** tests, lint, `docker compose up` and git. **Asked first:** new packages and `docker compose down`. **Denied:** reading `.env`, force-pushes, `git reset --hard`, every `aws` and `gh` command, and `~/.aws` |
 | [`.claude/hooks/format-file.mjs`](../.claude/hooks/format-file.mjs) | After every edit, runs Prettier and ESLint's fixes on the file, and reports what ESLint can't fix |
 | [`.claude/hooks/stop-gate.mjs`](../.claude/hooks/stop-gate.mjs) | Before a turn ends, type-checks and lints the changed files. On failure it blocks once, then only warns |
+| [`scripts/git-guard.ts`](../scripts/git-guard.ts) | Before every shell command, blocks force-pushes and branch deletions, `git reset --hard`, `git clean`, `git -c`, `git config` writes and `--no-index`, wherever their flags sit. Permission rules only match the start of a command, so they can't do this alone |
 | [`.claude/skills/`](../.claude/skills) | `/slice` builds a slice test-first, ending in a verified commit. `/add-dependency` challenges a new package, checks it, pins it and commits it alone. `/self-review` runs the review |
 | [`.claude/agents/`](../.claude/agents) | Four read-only lens reviewers (correctness, security, maintainability, tests and docs) and an adversarial verifier |
 | [`REVIEW.md`](../REVIEW.md) | The review guide: severity scale, evidence rule, checklists, report and triage templates |
