@@ -1,7 +1,8 @@
-// Fails when a text file in the repository holds a hidden format character: a bidirectional
-// control, a zero-width character or any other Unicode "Cf" character, or a line or paragraph
-// separator. They can make code read differently from how it runs, so the source writes them as
-// escapes instead.
+// Fails when a text file in the repository holds a character that doesn't show: a bidirectional
+// control, a zero-width character or any other Unicode "Cf" character, a control character
+// (tabs and carriage returns aside), a line or paragraph separator, or a code point that renders
+// as nothing, such as U+3164 HANGUL FILLER or a variation selector. They can make code read
+// differently from how it runs, so the source writes them as escapes instead.
 //
 // Usage: node scripts/check-text.ts
 import { execFileSync } from 'node:child_process'
@@ -13,17 +14,31 @@ export interface HiddenCharacter {
   codePoint: string
 }
 
-const HIDDEN = /[\p{Cf}\p{Zl}\p{Zp}]/gu
+const HIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/gu
+/** Control characters that are ordinary in text: tabs, and the carriage returns of CRLF. */
+const ORDINARY = new Set(['\t', '\r'])
+/** Files skipped as binary, by extension: the ones .gitattributes marks, and their kin. */
+const BINARY = /\.(png|jpe?g|gif|ico|webp|avif|pdf|woff2?|ttf|otf|zip|gz)$/i
 
-/** Every hidden format character in `text`, with its 1-based line and column. */
+/** Every hidden character in `text`, with its 1-based line and column. */
 export function findHiddenCharacters(text: string): HiddenCharacter[] {
   return text.split('\n').flatMap((line, index) =>
-    [...line.matchAll(HIDDEN)].map((match) => ({
-      line: index + 1,
-      column: match.index + 1,
-      codePoint: `U+${(match[0].codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`,
-    })),
+    [...line.matchAll(HIDDEN)]
+      .filter((match) => !ORDINARY.has(match[0]))
+      .map((match) => ({
+        line: index + 1,
+        column: match.index + 1,
+        codePoint: `U+${(match[0].codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`,
+      })),
   )
+}
+
+/**
+ * The hidden characters in one file. Binary files are known by their extension, never by a NUL
+ * byte: a NUL in a text file is one more character to report, not a reason to skip the file.
+ */
+export function checkFile(path: string, bytes: Buffer): HiddenCharacter[] {
+  return BINARY.test(path) ? [] : findHiddenCharacters(bytes.toString('utf8'))
 }
 
 /** The repository's files, tracked or new, without the ignored ones. */
@@ -53,9 +68,8 @@ if (import.meta.main) {
   let found = 0
   for (const file of files) {
     const bytes = readIfPresent(file)
-    // A NUL byte means a binary file, such as an image.
-    if (bytes === null || bytes.includes(0)) continue
-    for (const { line, column, codePoint } of findHiddenCharacters(bytes.toString('utf8'))) {
+    if (bytes === null) continue
+    for (const { line, column, codePoint } of checkFile(file, bytes)) {
       console.error(`${file}:${line}:${column}: hidden character ${codePoint}`)
       found += 1
     }
