@@ -6,10 +6,7 @@ import { pinIcon } from './pinIcon.ts'
 
 const ACTIVE_CLASS = 'room-pin--active'
 
-/**
- * Keeps one pin per room on the map and highlights the open room's pin. Rooms are only ever
- * added, so pins are only ever added too.
- */
+/** Keeps one pin per listed room on the map, and highlights the open room's pin. */
 export function useRoomMarkers(
   map: Readonly<ShallowRef<L.Map | null>>,
   rooms: Readonly<Ref<readonly Room[]>>,
@@ -24,6 +21,13 @@ export function useRoomMarkers(
     const instance = map.value
     if (!instance) return
 
+    // The store keeps only the newest rooms, so a room can leave the list.
+    const listed = new Set(rooms.value.map((room) => room.id))
+    for (const [id, marker] of markers) {
+      if (listed.has(id)) continue
+      marker.remove()
+      markers.delete(id)
+    }
     for (const room of rooms.value) {
       if (!markers.has(room.id)) markers.set(room.id, createMarker(room).addTo(instance))
     }
@@ -53,7 +57,9 @@ export function useRoomMarkers(
     marker.setZIndexOffset(active ? 1000 : 0)
   }
 
-  // One watcher, so a room created and selected in the same tick gets its pin before the highlight.
-  watch([map, () => rooms.value.length, selectedRoomId], sync, { immediate: true })
+  // One watcher, so a room created and selected in the same tick gets its pin before the
+  // highlight. It watches the list itself, not its length: at the cap, a new room replaces the
+  // oldest and the count stays the same.
+  watch([map, rooms, selectedRoomId], sync, { immediate: true })
   onBeforeUnmount(() => markers.clear())
 }

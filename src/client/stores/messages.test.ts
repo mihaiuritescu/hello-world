@@ -95,6 +95,41 @@ describe('messages store', () => {
     expect(messages.listFor(2)).toEqual([message(2, 2)])
   })
 
+  it('keeps a newer message that arrived while the room was loading', async () => {
+    const messages = useMessagesStore()
+    messages.upsert(message(4))
+    requestJsonMock.mockResolvedValue({ messages: [message(1), message(2), message(3)] })
+
+    await messages.load(1)
+
+    expect(messages.listFor(1).map((m) => m.id)).toEqual([1, 2, 3, 4])
+  })
+
+  it('keeps the newest cached message when a full page arrives', async () => {
+    const messages = useMessagesStore()
+    messages.upsert(message(300))
+    const page = Array.from({ length: LIMITS.loadedMessages }, (_, index) => message(200 + index))
+    requestJsonMock.mockResolvedValue({ messages: page })
+
+    await messages.load(1)
+
+    const ids = messages.listFor(1).map((m) => m.id)
+    expect(ids[ids.length - 1]).toBe(300)
+    expect(ids).toHaveLength(LIMITS.loadedMessages)
+  })
+
+  it("keeps only a room's newest 100 messages, however many arrive", () => {
+    const messages = useMessagesStore()
+
+    for (let id = 1; id <= LIMITS.loadedMessages + 5; id += 1) messages.upsert(message(id))
+    messages.upsert(message(1000, 2))
+
+    expect(messages.listFor(1).map((m) => m.id)).toEqual(
+      Array.from({ length: LIMITS.loadedMessages }, (_, index) => index + 6),
+    )
+    expect(messages.listFor(2)).toEqual([message(1000, 2)])
+  })
+
   it('reports a failed load', async () => {
     requestJsonMock.mockRejectedValue(new Error('offline'))
     const messages = useMessagesStore()

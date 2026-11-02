@@ -1,12 +1,14 @@
+import type { Room } from '#shared/domain.ts'
+import { within } from '@testing-library/dom'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import ChatMap from './ChatMap.vue'
 
-// jsdom has no layout, so these tests only cover keyboard input. Clicks, drags and pins are
-// covered by the Playwright tests.
-async function renderMap() {
+// jsdom has no layout, so these tests only cover keyboard input and which pins exist. Clicks,
+// drags and where pins sit are covered by the Playwright tests.
+async function renderMap(rooms: Room[] = []) {
   const wrapper = mount(ChatMap, {
-    props: { rooms: [], selectedRoomId: null },
+    props: { rooms, selectedRoomId: null },
     attachTo: document.body,
   })
   // The keyboard listener is attached once the template ref is set, one tick after mounting.
@@ -54,5 +56,31 @@ describe('ChatMap keyboard input', () => {
     pressEnter(pin)
 
     expect(wrapper.emitted('createAt')).toBeUndefined()
+  })
+})
+
+describe('ChatMap pins', () => {
+  let unmount: () => void
+
+  afterEach(() => {
+    unmount()
+  })
+
+  function room(id: number): Room {
+    return { id, lat: 45 + id, lng: 20, createdAt: '2026-11-02T10:00:00.000Z' }
+  }
+
+  it('swaps the pins when the list keeps its length but changes its rooms', async () => {
+    const { wrapper } = await renderMap([room(1), room(2)])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+    expect(screen.getByTitle('Chatroom 1')).toBeInTheDocument()
+
+    // At the cap, a new room pushes the oldest out, and the count stays the same.
+    await wrapper.setProps({ rooms: [room(2), room(3)] })
+
+    expect(screen.queryByTitle('Chatroom 1')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Chatroom 2')).toBeInTheDocument()
+    expect(screen.getByTitle('Chatroom 3')).toBeInTheDocument()
   })
 })

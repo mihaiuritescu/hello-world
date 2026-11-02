@@ -1,7 +1,8 @@
-import type { Room } from '#shared/domain.ts'
+import { LIMITS, type Room } from '#shared/domain.ts'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, requestJson } from '../lib/http.ts'
+import { deferred } from '../test/deferred.ts'
 import { useRoomsStore } from './rooms.ts'
 
 vi.mock('../lib/http.ts', async (importOriginal) => ({
@@ -16,6 +17,7 @@ function room(id: number): Room {
 
 describe('rooms store', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     setActivePinia(createPinia())
     requestJsonMock.mockReset()
   })
@@ -99,5 +101,32 @@ describe('rooms store', () => {
     rooms.upsert(room(3))
 
     expect(rooms.list).toEqual([room(3)])
+  })
+
+  it('lets only the newest load decide the status, while an older one still adds its rooms', async () => {
+    const older = deferred<{ rooms: Room[] }>()
+    requestJsonMock.mockReturnValueOnce(older.promise).mockRejectedValueOnce(new Error('offline'))
+    const rooms = useRoomsStore()
+    const olderLoad = rooms.load()
+
+    await rooms.load()
+    older.resolve({ rooms: [room(5)] })
+    await olderLoad
+
+    // 'error' keeps the app polling until a load succeeds; a stale 'ready' would stop it.
+    expect(rooms.status).toBe('error')
+    expect(rooms.byId.get(5)).toEqual(room(5))
+  })
+
+  it('keeps at most 1,000 rooms: the newest, and the open one', () => {
+    window.history.replaceState(null, '', '/?room=1')
+    const rooms = useRoomsStore()
+
+    for (let id = 1; id <= LIMITS.listedRooms + 2; id += 1) rooms.upsert(room(id))
+
+    const ids = rooms.list.map((r) => r.id)
+    expect(ids).toHaveLength(LIMITS.listedRooms)
+    expect(ids.slice(0, 2)).toEqual([1, 4])
+    expect(ids[ids.length - 1]).toBe(LIMITS.listedRooms + 2)
   })
 })

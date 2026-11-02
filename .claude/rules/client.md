@@ -21,8 +21,9 @@ paths:
 - Scoped styles don't reach DOM that Leaflet creates. Put overrides in `styles/global.css`, or use `:deep()`.
 
 ## Realtime
-- Exactly one socket, owned by the realtime store.
-- Bind its events once, and unbind them in `import.meta.hot.dispose`, so HMR never duplicates events.
+- Exactly one socket, owned by the realtime store and opened once from `App.vue`.
+- Bind its events once, inside the store. A hot update of the store reloads the page, so development never holds two sockets or binds an event twice.
+- Socket events go through the same store `upsert` functions as HTTP responses (I4). The socket never carries writes (I5).
 
 ## Accessibility
 - **Inputs:** every input has a visible label. Keep the mockup texts visible with Vuetify's `persistent-placeholder`.

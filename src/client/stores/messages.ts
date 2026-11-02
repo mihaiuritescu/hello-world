@@ -26,9 +26,16 @@ export const useMessagesStore = defineStore('messages', () => {
     return statusByRoom.value.get(roomId) ?? 'idle'
   }
 
-  /** Adds or replaces a message. HTTP responses and, later, socket events both come through here. */
+  /**
+   * Adds or replaces a message, keeping a room's newest `LIMITS.loadedMessages`, as a fresh load
+   * would. HTTP responses and socket events both come through here. Live messages only ever add
+   * up, so without the cap a flooded room would grow an open tab without end.
+   */
   function upsert(message: Message): void {
     byId.value.set(message.id, message)
+    const room = listFor(message.roomId)
+    const excess = room.length - LIMITS.loadedMessages
+    if (excess > 0) room.slice(0, excess).forEach((old) => byId.value.delete(old.id))
   }
 
   /** Fetches a room's newest messages and merges them with the ones already here. */

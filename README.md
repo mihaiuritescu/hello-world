@@ -2,7 +2,7 @@
 
 A real-time chat on a world map: click anywhere to drop a pin, open its chatroom, and talk to whoever else is there. Built for the Wolfpack Digital full-stack test.
 
-> **Status:** rooms and messages work, and both persist. Real-time updates come next. See the [PRD](docs/PRD.md) for the plan.
+> **Status:** rooms, messages and live updates work, and everything persists. Hardening and the AWS demo come next. See the [PRD](docs/PRD.md) for the plan.
 
 ## Using it
 
@@ -10,6 +10,7 @@ A real-time chat on a world map: click anywhere to drop a pin, open its chatroom
 - **Open a room:** click its pin, or focus the pin and press Enter. The open room's pin turns red, and the panel shows the room's latest 100 messages.
 - **Post a message:** write your name and a message, then press Submit or Enter. The message field clears for the next one, and your name is remembered on this device.
 - **Send again safely:** if a send fails, your draft stays in the field. Sending it again never posts it twice.
+- **Live updates:** open the app in two windows. New pins, and new messages in the room you have open, show up in both within a second. The chip next to the room title says **Live**, or **Reconnecting…** while the app catches up; without a live connection, it refreshes every 10 seconds.
 - **Share a room:** the open room is part of the URL (`?room=3`), so a link or a reload reopens it.
 
 ## Quick start (only Docker needed)

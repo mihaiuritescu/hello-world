@@ -61,6 +61,13 @@ describe('ChatPanel', () => {
     expect(screen.queryByText('Click on the map to start a chat')).not.toBeInTheDocument()
   })
 
+  it('shows the connection status next to the room title', () => {
+    const { screen } = renderPanel(room(7))
+
+    expect(screen.getByRole('status', { name: 'Connection' })).toHaveTextContent('Connecting…')
+    expect(screen.getByRole('heading', { name: 'Chatroom 7' })).toBeVisible()
+  })
+
   it("loads the open room's messages and lists them", async () => {
     requestJsonMock.mockResolvedValue({ messages: [message] })
     const { screen } = renderPanel(room(7))

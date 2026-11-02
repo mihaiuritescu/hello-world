@@ -3,11 +3,13 @@ import type { Coordinates } from '#shared/schemas.ts'
 import { computed, onMounted, ref } from 'vue'
 import ChatPanel from './features/chat/ChatPanel.vue'
 import ChatMap from './features/map/ChatMap.vue'
+import { useRealtimeStore } from './stores/realtime.ts'
 import { useRoomsStore } from './stores/rooms.ts'
 import { useSessionStore } from './stores/session.ts'
 
 const rooms = useRoomsStore()
 const session = useSessionStore()
+const realtime = useRealtimeStore()
 const errorMessage = ref<string | null>(null)
 
 /** The open room, once it has loaded. An unknown id in the URL leaves the panel empty. */
@@ -16,6 +18,9 @@ const selectedRoom = computed(() =>
 )
 
 onMounted(async () => {
+  // Live updates start alongside the first load. Once connected, the rooms load again, which
+  // covers anything created between this load and the connection.
+  realtime.connect()
   await rooms.load()
   // A link can name a room older than the ones the list holds.
   if (session.selectedRoomId !== null) await rooms.ensureLoaded(session.selectedRoomId)

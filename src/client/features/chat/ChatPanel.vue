@@ -3,11 +3,14 @@ import type { Room } from '#shared/domain.ts'
 import { computed, nextTick, useTemplateRef, watch } from 'vue'
 import { roomTitle } from '../../lib/roomTitle.ts'
 import { useMessagesStore } from '../../stores/messages.ts'
+import { useRealtimeStore } from '../../stores/realtime.ts'
+import ConnectionChip from './ConnectionChip.vue'
 import MessageComposer from './MessageComposer.vue'
 import MessageList from './MessageList.vue'
 
 const props = defineProps<{ room: Room | null }>()
 const messages = useMessagesStore()
+const realtime = useRealtimeStore()
 const list = useTemplateRef<InstanceType<typeof MessageList>>('list')
 
 const roomMessages = computed(() => (props.room ? messages.listFor(props.room.id) : []))
@@ -17,8 +20,13 @@ function loadMessages(): void {
   if (props.room) void messages.load(props.room.id)
 }
 
-// A room's messages load each time it opens: others may have written since it was last open.
-watch(() => props.room?.id, loadMessages, { immediate: true })
+// Opening a room follows it live, and loads its messages each time it opens: others may have
+// written since it was last open.
+watch(
+  () => props.room?.id,
+  (roomId) => void realtime.openRoom(roomId ?? null),
+  { immediate: true },
+)
 
 // The user's own message always comes into view, even if they had scrolled up to read.
 async function showSentMessage(): Promise<void> {
@@ -30,7 +38,10 @@ async function showSentMessage(): Promise<void> {
 <template>
   <v-card tag="aside" class="chat-panel" aria-label="Chat" elevation="8" rounded="lg">
     <template v-if="room">
-      <v-card-title tag="h2">{{ roomTitle(room) }}</v-card-title>
+      <div class="chat-panel__header">
+        <v-card-title tag="h2">{{ roomTitle(room) }}</v-card-title>
+        <ConnectionChip :status="realtime.status" class="mr-4" />
+      </div>
       <!-- Keyed by room, so each room opens on its newest messages. The draft lives in the
            drafts store, so it comes back with the room. -->
       <MessageList
@@ -61,5 +72,12 @@ async function showSentMessage(): Promise<void> {
   /* Stops short of the bottom edge, where the map's attribution must stay visible. The message
      list scrolls inside this height. */
   max-height: calc(100% - 72px);
+}
+
+.chat-panel__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
 }
 </style>

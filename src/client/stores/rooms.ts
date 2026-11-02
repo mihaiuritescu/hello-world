@@ -1,31 +1,51 @@
-import type { Room } from '#shared/domain.ts'
+import { LIMITS, type Room } from '#shared/domain.ts'
 import type { Coordinates } from '#shared/schemas.ts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { ApiError, requestJson } from '../lib/http.ts'
+import { useSessionStore } from './session.ts'
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export const useRoomsStore = defineStore('rooms', () => {
+  const session = useSessionStore()
   const byId = ref(new Map<number, Room>())
   const status = ref<LoadStatus>('idle')
 
   /** Every room, ordered by id: the same order for every client (I4). */
   const list = computed(() => [...byId.value.values()].sort((a, b) => a.id - b.id))
 
-  /** Adds or replaces a room. HTTP responses and, later, socket events both come through here. */
+  // Counts loads, so only the newest decides the status. An older load that answers late may
+  // miss rooms created since; its 'ready' would hide a newer failure and stop the polling that
+  // retries it. Its rooms still count, since a page only adds rooms.
+  let loadCount = 0
+
+  /**
+   * Adds or replaces a room. HTTP responses and socket events both come through here. The store
+   * keeps at most `LIMITS.listedRooms` rooms, as a fresh load would: the newest, and the open
+   * room even when it's older. Announced rooms only ever add up, so without the cap a flood of
+   * new rooms would grow an open tab without end.
+   */
   function upsert(room: Room): void {
     byId.value.set(room.id, room)
+    if (byId.value.size > LIMITS.listedRooms) dropOldest()
+  }
+
+  function dropOldest(): void {
+    const candidates = [...byId.value.keys()].filter((id) => id !== session.selectedRoomId)
+    byId.value.delete(Math.min(...candidates))
   }
 
   async function load(): Promise<void> {
+    loadCount += 1
+    const loadId = loadCount
     status.value = 'loading'
     try {
       const { rooms } = await requestJson<{ rooms: Room[] }>('/api/rooms')
       rooms.forEach(upsert)
-      status.value = 'ready'
+      if (loadId === loadCount) status.value = 'ready'
     } catch {
-      status.value = 'error'
+      if (loadId === loadCount) status.value = 'error'
     }
   }
 
