@@ -1,4 +1,4 @@
-import { useUrlSearchParams } from '@vueuse/core'
+import { useLocalStorage, useUrlSearchParams } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
 
@@ -14,7 +14,10 @@ export const useSessionStore = defineStore('session', () => {
     params.room = id === null ? undefined : String(id)
   }
 
-  return { selectedRoomId, selectRoom }
+  /** The name the user writes as. It stays on this device, so they type it only once. */
+  const authorName = useLocalStorage('hello-world.authorName', '')
+
+  return { selectedRoomId, selectRoom, authorName }
 })
 
 function parseRoomId(value: string | undefined): number | null {

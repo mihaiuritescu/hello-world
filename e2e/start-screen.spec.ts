@@ -1,5 +1,5 @@
-import type { Locator } from '@playwright/test'
 import { expect, test } from './fixtures.ts'
+import { overlap } from './layout.ts'
 
 test.describe('start screen (FR-1)', () => {
   test('shows the map, its controls and the start panel @smoke', async ({ page }) => {
@@ -26,14 +26,3 @@ test.describe('start screen (FR-1)', () => {
     expect(await overlap(panel, attribution)).toBe(false)
   })
 })
-
-async function overlap(a: Locator, b: Locator): Promise<boolean> {
-  const [boxA, boxB] = await Promise.all([a.boundingBox(), b.boundingBox()])
-  if (!boxA || !boxB) throw new Error('Both elements must be rendered')
-  return (
-    boxA.x < boxB.x + boxB.width &&
-    boxB.x < boxA.x + boxA.width &&
-    boxA.y < boxB.y + boxB.height &&
-    boxB.y < boxA.y + boxA.height
-  )
-}

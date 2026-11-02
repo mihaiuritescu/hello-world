@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
+import { seedMessages, seedRooms } from './database.ts'
 import { expect, test } from './fixtures.ts'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -17,6 +18,21 @@ test.describe('accessibility', () => {
     await page.goto('/')
     await page.locator('.leaflet-container').click({ position: { x: 250, y: 360 } })
     await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+
+    expect(results.violations).toEqual([])
+  })
+
+  test('a room with a scrolling message list has no detectable WCAG violations', async ({
+    page,
+  }) => {
+    await seedRooms(1)
+    await seedMessages(1, 30)
+    await page.goto('/?room=1')
+    await expect(
+      page.getByRole('log', { name: 'Messages' }).getByText('Message 30', { exact: true }),
+    ).toBeVisible()
 
     const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
 

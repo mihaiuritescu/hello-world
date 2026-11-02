@@ -9,6 +9,7 @@ function openPage(search: string): void {
 
 describe('session store', () => {
   beforeEach(() => {
+    localStorage.clear()
     setActivePinia(createPinia())
   })
 
@@ -49,5 +50,20 @@ describe('session store', () => {
 
     expect(session.selectedRoomId).toBeNull()
     expect(window.location.search).toBe('')
+  })
+
+  it('remembers the author name on this device', async () => {
+    const session = useSessionStore()
+
+    session.authorName = 'Alice'
+    await nextTick()
+
+    expect(localStorage.getItem('hello-world.authorName')).toBe('Alice')
+  })
+
+  it('starts with the author name remembered from an earlier visit', () => {
+    localStorage.setItem('hello-world.authorName', 'Bob')
+
+    expect(useSessionStore().authorName).toBe('Bob')
   })
 })

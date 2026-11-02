@@ -13,6 +13,9 @@ export default mergeConfig(
             environment: 'jsdom',
             include: ['src/client/**/*.test.ts', 'src/shared/**/*.test.ts'],
             setupFiles: ['src/client/test/setup.ts'],
+            // Message dates show in local time. A fixed zone, the one Playwright uses, keeps
+            // date tests independent of the machine they run on.
+            env: { TZ: 'Europe/Bucharest' },
             // Vuetify ships CSS imports that only Vite's pipeline can load.
             server: { deps: { inline: ['vuetify'] } },
           },

@@ -2,12 +2,14 @@
 
 A real-time chat on a world map: click anywhere to drop a pin, open its chatroom, and talk to whoever else is there. Built for the Wolfpack Digital full-stack test.
 
-> **Status:** creating, listing and opening rooms works. Messages and real-time updates come next. See the [PRD](docs/PRD.md) for the plan.
+> **Status:** rooms and messages work, and both persist. Real-time updates come next. See the [PRD](docs/PRD.md) for the plan.
 
 ## Using it
 
 - **Create a chatroom:** click anywhere on the map, or focus the map and press Enter to create one at its centre.
-- **Open a room:** click its pin, or focus the pin and press Enter. The open room's pin turns red.
+- **Open a room:** click its pin, or focus the pin and press Enter. The open room's pin turns red, and the panel shows the room's latest 100 messages.
+- **Post a message:** write your name and a message, then press Submit or Enter. The message field clears for the next one, and your name is remembered on this device.
+- **Send again safely:** if a send fails, your draft stays in the field. Sending it again never posts it twice.
 - **Share a room:** the open room is part of the URL (`?room=3`), so a link or a reload reopens it.
 
 ## Quick start (only Docker needed)

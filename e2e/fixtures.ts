@@ -8,12 +8,22 @@ const BLANK_TILE = Buffer.from(
   'base64',
 )
 
+interface Options {
+  /**
+   * Console errors a test causes on purpose. Chromium logs every failed request as one, so a
+   * test that makes a request fail lists that message here.
+   */
+  allowedConsoleErrors: RegExp[]
+}
+
 /**
  * The default `page`, on an empty database, with map tiles stubbed. It fails the test on any
  * browser console error, which includes Content-Security-Policy violations.
  */
-export const test = base.extend({
-  page: async ({ page }, use) => {
+export const test = base.extend<Options>({
+  allowedConsoleErrors: [[], { option: true }],
+
+  page: async ({ page, allowedConsoleErrors }, use) => {
     await resetDatabase()
     await page.route('https://tile.openstreetmap.org/**', (route) =>
       route.fulfill({ contentType: 'image/png', body: BLANK_TILE }),
@@ -21,7 +31,8 @@ export const test = base.extend({
 
     const errors: string[] = []
     page.on('console', (message) => {
-      if (message.type() === 'error') errors.push(message.text())
+      const allowed = allowedConsoleErrors.some((pattern) => pattern.test(message.text()))
+      if (message.type() === 'error' && !allowed) errors.push(message.text())
     })
     page.on('pageerror', (error) => errors.push(error.message))
 

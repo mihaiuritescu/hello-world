@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import mysql from 'mysql2/promise'
 
 // The database the end-to-end server runs against (see `webServer.env` in playwright.config.ts).
@@ -16,6 +17,25 @@ export async function seedRooms(count: number): Promise<void> {
   try {
     const rows = Array.from({ length: count }, () => [0, 0])
     await connection.query('INSERT INTO rooms (lat, lng) VALUES ?', [rows])
+  } finally {
+    await connection.end()
+  }
+}
+
+/** Inserts `count` messages into a room, "Message 1" to "Message <count>", in one statement. */
+export async function seedMessages(roomId: number, count: number): Promise<void> {
+  const connection = await mysql.createConnection(connectionOptions)
+  try {
+    const rows = Array.from({ length: count }, (_, index) => [
+      roomId,
+      randomUUID(),
+      'Seeder',
+      `Message ${index + 1}`,
+    ])
+    await connection.query(
+      'INSERT INTO messages (room_id, client_id, author_name, body) VALUES ?',
+      [rows],
+    )
   } finally {
     await connection.end()
   }
