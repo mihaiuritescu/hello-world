@@ -66,11 +66,12 @@ export async function buildApp({
   await app.register(helmet, helmetOptions(config))
   // Per client address, counted by request.ip, which honours TRUST_PROXY. Routes registered after
   // this get the API-wide limit unless they set their own. Only the API is limited: the health
-  // checks, the SPA's files and the WebSocket path are not.
+  // checks, the SPA's files and the WebSocket path are not. The check reads the route that
+  // matched, never the raw URL: the router decodes "/%61pi/rooms" to "/api/rooms".
   await app.register(rateLimit, {
     max: rateLimits.apiPerMinute,
     timeWindow: '1 minute',
-    allowList: (request) => !request.url.startsWith('/api/'),
+    allowList: (request) => !request.routeOptions.url?.startsWith('/api/'),
     errorResponseBuilder: (_request, { after }) => tooManyRequests(after),
   })
   registerHealthRoutes(app, { db, version: config.version })

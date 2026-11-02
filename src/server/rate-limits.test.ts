@@ -78,6 +78,26 @@ describe('rate limits', () => {
     expect((await createRoom(app)).statusCode).toBe(201)
   })
 
+  it('counts a percent-encoded API path against the same limits', async () => {
+    const app = await appWithLimits({
+      RATE_LIMIT_ROOMS_PER_MINUTE: '1',
+      RATE_LIMIT_API_PER_MINUTE: '1',
+    })
+    expect((await createRoom(app)).statusCode).toBe(201)
+    expect((await app.inject({ method: 'GET', url: '/api/rooms' })).statusCode).toBe(200)
+
+    // The router decodes %61 to "a", so these reach the same routes as /api/rooms.
+    const encodedCreate = await app.inject({
+      method: 'POST',
+      url: '/%61pi/rooms',
+      payload: { lat: 1, lng: 1 },
+    })
+    const encodedRead = await app.inject({ method: 'GET', url: '/%61pi/rooms' })
+
+    expect(encodedCreate.statusCode).toBe(429)
+    expect(encodedRead.statusCode).toBe(429)
+  })
+
   it('never limits the health checks', async () => {
     const app = await appWithLimits({ RATE_LIMIT_API_PER_MINUTE: '1' })
 
