@@ -66,6 +66,7 @@ Integration tests need MySQL, so run `pnpm db:up` first.
 ## Database (MySQL 8.4)
 
 - **One DDL statement per migration file.** MySQL DDL commits implicitly and can't be rolled back.
+- **Migrations only add:** tables, columns with defaults, indexes. The previous version must keep running on the new schema, so a rollback is a plain redeploy; the migrate step leaves a database that a newer version migrated as it is.
 - **Migrations run only as a one-off step:** `pnpm db:migrate`, the compose `migrate` service, or the deploy. Never on app start.
 - **Every connection uses UTC and strict SQL mode**, set in `db/database.ts`.
 - **Handle duplicate keys (errno 1062) and missing parents (errno 1452) explicitly.** Never use `INSERT IGNORE`.
