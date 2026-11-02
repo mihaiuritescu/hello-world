@@ -29,7 +29,8 @@
     "test:e2e": "run-s db:up e2e",
     "e2e": "playwright test",
     "check:licenses": "node scripts/check-licenses.ts",
-    "verify": "run-s db:up lint format:check type-check check:licenses test",
+    "check:text": "node scripts/check-text.ts",
+    "verify": "run-s db:up lint format:check type-check check:licenses check:text test",
     "prepare": "husky"
   },
   "dependencies": {

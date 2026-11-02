@@ -13,7 +13,7 @@ Read [`docs/PRD.md`](docs/PRD.md) first. It holds the requirements (FR-1 to FR-6
 | Install dependencies | `pnpm install` |
 | Start MySQL, migrate, run API and web | `pnpm dev`, then open http://localhost:5173 |
 | Run the whole app in Docker | `docker compose up --build`, then open http://localhost:3000 |
-| All checks: lint, types, licences, tests | `pnpm verify` |
+| All checks: lint, types, licences, hidden characters, tests | `pnpm verify` |
 | One test file | `pnpm exec vitest run src/server/rooms/rooms.routes.test.ts` |
 | End-to-end tests | `pnpm test:e2e` |
 | Format | `pnpm format` |
@@ -86,6 +86,7 @@ Integration tests need MySQL, so run `pnpm db:up` first.
 
 - **Validate every input at the boundary** with the shared zod schemas: HTTP bodies and params, socket payloads, environment.
 - **Never log** message bodies, author names or secrets.
+- **No hidden characters in the source.** Write bidirectional controls and zero-width characters as Unicode escapes, never raw. `pnpm check:text` fails on raw ones.
 - **Never commit secrets.** Configuration comes from environment variables, documented in `.env.example`.
 - **Headers:** `@fastify/helmet` owns the security headers. HTTPS-only headers turn on when `PUBLIC_URL` uses https.
 

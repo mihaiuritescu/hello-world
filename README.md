@@ -48,7 +48,7 @@ pnpm dev
 | `pnpm dev` | MySQL, migrations, API and web dev server, with reload on change |
 | `pnpm build` then `pnpm start` | Build the SPA and serve everything from the API on port 3000 |
 | `pnpm db:up` / `pnpm db:migrate` | Start MySQL in Docker / apply pending migrations |
-| `pnpm verify` | MySQL, then lint, format check, type-check, licence check, unit and integration tests |
+| `pnpm verify` | MySQL, then lint, format check, type-check, licence check, hidden-character check, unit and integration tests |
 | `pnpm test` | Unit and integration tests (MySQL must be running: `pnpm db:up`) |
 | `pnpm test:e2e` | Playwright end-to-end tests against the production build |
 | `pnpm format` | Format the code with Prettier |

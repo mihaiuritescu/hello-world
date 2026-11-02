@@ -25,7 +25,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Starts MySQL with Docker Compose, then runs lint, format, types, licences and tests.
+      # Starts MySQL with Docker Compose, then runs lint, format, types, licences, the hidden-character
+      # check and the tests.
       - run: pnpm verify
 
   e2e:
