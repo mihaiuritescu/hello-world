@@ -21,6 +21,12 @@ export const RoomIdParamsSchema = z.object({
     .pipe(z.number().max(Number.MAX_SAFE_INTEGER)),
 })
 
+/** A client's request to follow one room's messages over the socket (`room:subscribe`). */
+export const RoomSubscriptionSchema = z.object({
+  roomId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+})
+export type RoomSubscription = z.infer<typeof RoomSubscriptionSchema>
+
 /**
  * Trimmed text that everyone in the room will see. Lengths count UTF-16 code units, as
  * JavaScript and `maxlength` do. That is never fewer than the characters MySQL counts, so a

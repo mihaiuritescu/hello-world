@@ -12,7 +12,8 @@ import { errorBody, registerErrorHandler } from './errors.ts'
 import { registerHealthRoutes } from './health.routes.ts'
 import { createMessagesRepository } from './messages/messages.repository.ts'
 import { registerMessageRoutes } from './messages/messages.routes.ts'
-import { silentBroadcaster, type Broadcaster } from './realtime/broadcaster.ts'
+import type { Broadcaster } from './realtime/broadcaster.ts'
+import { attachSocketServer } from './realtime/socket-server.ts'
 import { createRoomsRepository } from './rooms/rooms.repository.ts'
 import { registerRoomRoutes } from './rooms/rooms.routes.ts'
 
@@ -24,7 +25,10 @@ const OSM_TILES = 'https://tile.openstreetmap.org'
 export interface AppDeps {
   config: Config
   db: Kysely<Database>
-  /** Announces committed changes to connected clients. Defaults to announcing nothing. */
+  /**
+   * Announces committed changes to connected clients. Defaults to Socket.IO on the app's own
+   * HTTP server. Tests that only check what gets announced pass their own, and open no sockets.
+   */
   broadcaster?: Broadcaster
   /** Where JSON logs go. Defaults to stdout. */
   logStream?: Writable
@@ -33,7 +37,7 @@ export interface AppDeps {
 export async function buildApp({
   config,
   db,
-  broadcaster = silentBroadcaster,
+  broadcaster,
   logStream,
 }: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
@@ -45,12 +49,18 @@ export async function buildApp({
     requestTimeout: 30_000,
   })
 
+  const announcer = broadcaster ?? attachSocketServer(app, { publicHost: config.publicHost })
+
   registerErrorHandler(app)
   await app.register(helmet, helmetOptions(config))
   registerHealthRoutes(app, { db, version: config.version })
   const rooms = createRoomsRepository(db)
-  registerRoomRoutes(app, { rooms, broadcaster })
-  registerMessageRoutes(app, { rooms, messages: createMessagesRepository(db), broadcaster })
+  registerRoomRoutes(app, { rooms, broadcaster: announcer })
+  registerMessageRoutes(app, {
+    rooms,
+    messages: createMessagesRepository(db),
+    broadcaster: announcer,
+  })
 
   if (existsSync(join(CLIENT_DIR, 'index.html'))) {
     await app.register(fastifyStatic, {

@@ -10,7 +10,7 @@ export interface Broadcaster {
   messageCreated(message: Message): void
 }
 
-/** Announces nothing. Used until real-time delivery exists, and by tests that ignore events. */
+/** Announces nothing. For tests that ignore announcements, or replace only one of them. */
 export const silentBroadcaster: Broadcaster = {
   roomCreated: () => {},
   messageCreated: () => {},

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { CoordinatesSchema, MessageDraftSchema, RoomIdParamsSchema } from './schemas.ts'
+import {
+  CoordinatesSchema,
+  MessageDraftSchema,
+  RoomIdParamsSchema,
+  RoomSubscriptionSchema,
+} from './schemas.ts'
 
 describe('CoordinatesSchema', () => {
   it('accepts coordinates on the edges of the valid range', () => {
@@ -73,5 +78,21 @@ describe('MessageDraftSchema', () => {
     expect(result.error?.issues).toMatchObject([
       { path: ['body'], message: "Text direction controls aren't allowed." },
     ])
+  })
+})
+
+describe('RoomSubscriptionSchema', () => {
+  it('accepts a positive whole room id', () => {
+    expect(RoomSubscriptionSchema.parse({ roomId: 7 })).toEqual({ roomId: 7 })
+  })
+
+  it.each([
+    ['a room id sent as a string', { roomId: '7' }],
+    ['a zero room id', { roomId: 0 }],
+    ['a fractional room id', { roomId: 1.5 }],
+    ['a missing room id', {}],
+    ['no payload at all', null],
+  ])('rejects %s', (_case, input) => {
+    expect(RoomSubscriptionSchema.safeParse(input).success).toBe(false)
   })
 })

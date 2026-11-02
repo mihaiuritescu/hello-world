@@ -47,6 +47,11 @@ export interface Config {
   prettyLogs: boolean
   /** True when the public origin uses HTTPS, which enables the HTTPS-only security headers. */
   isHttps: boolean
+  /**
+   * The host of `PUBLIC_URL`, the only origin that may open WebSockets once it's set. Null in
+   * local runs, where the request's own Host stands in for it.
+   */
+  publicHost: string | null
   /** Proxy addresses whose X-Forwarded-* headers are trusted, or false when clients connect directly. */
   trustProxy: string | false
   db: DbConfig
@@ -66,6 +71,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     logLevel: vars.LOG_LEVEL,
     prettyLogs: vars.NODE_ENV === 'development',
     isHttps: vars.PUBLIC_URL?.startsWith('https://') ?? false,
+    publicHost: vars.PUBLIC_URL ? new URL(vars.PUBLIC_URL).host : null,
     trustProxy: vars.TRUST_PROXY ?? false,
     db: {
       host: vars.DB_HOST,
