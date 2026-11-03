@@ -17,6 +17,7 @@ const list = useTemplateRef<InstanceType<typeof MessageList>>('list')
 
 const roomMessages = computed(() => (props.room ? messages.listFor(props.room.id) : []))
 const status = computed(() => (props.room ? messages.statusOf(props.room.id) : 'idle'))
+const loadingMessages = computed(() => (props.room ? messages.isLoading(props.room.id) : false))
 
 function loadMessages(): void {
   if (props.room) void messages.load(props.room.id)
@@ -56,6 +57,7 @@ async function showSentMessage(): Promise<void> {
         ref="list"
         :messages="roomMessages"
         :status="status"
+        :loading="loadingMessages"
         @retry="loadMessages"
       />
       <MessageComposer :key="`composer-${room.id}`" :room-id="room.id" @sent="showSentMessage" />
@@ -65,7 +67,7 @@ async function showSentMessage(): Promise<void> {
       <p class="text-body-2 text-medium-emphasis">or focus the map and press Enter</p>
       <div v-if="rooms.status === 'error'" class="mt-4">
         <p role="alert" class="mb-2">Couldn't load the chatrooms.</p>
-        <v-btn variant="tonal" @click="loadRooms">Retry</v-btn>
+        <v-btn variant="tonal" :loading="rooms.loading" @click="loadRooms">Retry</v-btn>
       </div>
     </v-card-text>
   </v-card>

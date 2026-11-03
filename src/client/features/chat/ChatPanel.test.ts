@@ -72,6 +72,24 @@ describe('ChatPanel', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('keeps the error and Retry, with its focus, while the chatrooms load again', async () => {
+    const reload = deferred<{ rooms: Room[] }>()
+    requestJsonMock.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(reload.promise)
+    const { screen } = renderPanel(null)
+    const rooms = useRoomsStore()
+    await rooms.load()
+    const retry = await screen.findByRole('button', { name: 'Retry' })
+
+    await userEvent.click(retry)
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the chatrooms.")
+    expect(retry).toBeInTheDocument()
+    expect(retry).toHaveFocus()
+    reload.resolve({ rooms: [room(1)] })
+    await flushPromises()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('shows the open room as "Chatroom N"', () => {
     const { screen } = renderPanel(room(7))
 

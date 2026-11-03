@@ -139,6 +139,37 @@ describe('messages store', () => {
     expect(messages.statusOf(1)).toBe('error')
   })
 
+  it("keeps a room's last result while it loads again, and says that a load is under way", async () => {
+    const reload = deferred<{ messages: Message[] }>()
+    requestJsonMock.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(reload.promise)
+    const messages = useMessagesStore()
+    await messages.load(1)
+
+    const reloading = messages.load(1)
+
+    expect(messages.statusOf(1)).toBe('error')
+    expect(messages.isLoading(1)).toBe(true)
+    reload.resolve({ messages: [message(1)] })
+    await reloading
+    expect(messages.statusOf(1)).toBe('ready')
+    expect(messages.isLoading(1)).toBe(false)
+  })
+
+  it('reports a failure at once, even while a newer load of the room still runs', async () => {
+    const newer = deferred<{ messages: Message[] }>()
+    requestJsonMock.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(newer.promise)
+    const messages = useMessagesStore()
+    const olderLoad = messages.load(1)
+    const newerLoad = messages.load(1)
+
+    await olderLoad
+
+    expect(messages.statusOf(1)).toBe('error')
+    newer.resolve({ messages: [message(1)] })
+    await newerLoad
+    expect(messages.statusOf(1)).toBe('ready')
+  })
+
   it("keeps each room's messages apart", () => {
     const messages = useMessagesStore()
 

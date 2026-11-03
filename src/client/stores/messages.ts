@@ -8,11 +8,16 @@ import type { LoadStatus } from './rooms.ts'
 export const useMessagesStore = defineStore('messages', () => {
   // Message ids are unique across rooms, so one map holds every room's messages.
   const byId = ref(new Map<number, Message>())
+  /** Each room's last load result. It stays while the room loads again, and so does its Retry. */
   const statusByRoom = ref(new Map<number, LoadStatus>())
+  const pendingByRoom = ref(new Map<number, number>())
 
-  // The newest load of each room. A load that answers after a newer one is ignored: its page may
-  // predate messages the newer one brought, and its status is out of date.
+  // The newest load of each room, and the newest that has settled. Only the newest load applies
+  // its page: an older one may predate messages the newer one brought. A failure counts at once,
+  // unless a newer load has settled already: polls that overlap would otherwise hide every
+  // failure behind the next attempt.
   const latestLoad = new Map<number, number>()
+  const settledLoad = new Map<number, number>()
   let loadCount = 0
 
   /** A room's messages, ordered by id: the same order for every client (I4). */
@@ -24,6 +29,11 @@ export const useMessagesStore = defineStore('messages', () => {
 
   function statusOf(roomId: number): LoadStatus {
     return statusByRoom.value.get(roomId) ?? 'idle'
+  }
+
+  /** Whether a load of the room is under way. */
+  function isLoading(roomId: number): boolean {
+    return (pendingByRoom.value.get(roomId) ?? 0) > 0
   }
 
   /**
@@ -43,7 +53,8 @@ export const useMessagesStore = defineStore('messages', () => {
     loadCount += 1
     const loadId = loadCount
     latestLoad.set(roomId, loadId)
-    statusByRoom.value.set(roomId, 'loading')
+    pendingByRoom.value.set(roomId, (pendingByRoom.value.get(roomId) ?? 0) + 1)
+    if (statusOf(roomId) === 'idle') statusByRoom.value.set(roomId, 'loading')
     try {
       const { messages } = await requestJson<{ messages: Message[] }>(
         `/api/rooms/${roomId}/messages`,
@@ -51,9 +62,15 @@ export const useMessagesStore = defineStore('messages', () => {
       if (latestLoad.get(roomId) !== loadId) return
       dropMessagesBefore(roomId, messages)
       messages.forEach(upsert)
+      settledLoad.set(roomId, loadId)
       statusByRoom.value.set(roomId, 'ready')
     } catch {
-      if (latestLoad.get(roomId) === loadId) statusByRoom.value.set(roomId, 'error')
+      if (loadId > (settledLoad.get(roomId) ?? 0)) {
+        settledLoad.set(roomId, loadId)
+        statusByRoom.value.set(roomId, 'error')
+      }
+    } finally {
+      pendingByRoom.value.set(roomId, (pendingByRoom.value.get(roomId) ?? 1) - 1)
     }
   }
 
@@ -79,5 +96,5 @@ export const useMessagesStore = defineStore('messages', () => {
     return message
   }
 
-  return { byId, statusByRoom, listFor, statusOf, upsert, load, send }
+  return { byId, statusByRoom, listFor, statusOf, isLoading, upsert, load, send }
 })

@@ -10,15 +10,22 @@ export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 export const useRoomsStore = defineStore('rooms', () => {
   const session = useSessionStore()
   const byId = ref(new Map<number, Room>())
+  /** The last load's result. It stays while a reload runs, so an error and its Retry stay too. */
   const status = ref<LoadStatus>('idle')
+  const pending = ref(0)
+  /** True while a load is under way. */
+  const loading = computed(() => pending.value > 0)
 
   /** Every room, ordered by id: the same order for every client (I4). */
   const list = computed(() => [...byId.value.values()].sort((a, b) => a.id - b.id))
 
-  // Counts loads, so only the newest decides the status. An older load that answers late may
-  // miss rooms created since; its 'ready' would hide a newer failure and stop the polling that
-  // retries it. Its rooms still count, since a page only adds rooms.
-  let loadCount = 0
+  // Numbers loads, so a load's result counts only if no load that started later has settled
+  // first. An older load that answers late may miss rooms created since: its 'ready' must not
+  // hide a newer failure and stop the polling that retries it. Its rooms still count, since a page
+  // only adds rooms. A failure counts at once, even while a newer load runs: polls that overlap
+  // would otherwise hide every failure behind the next attempt.
+  let started = 0
+  let settled = 0
 
   /**
    * Adds or replaces a room. HTTP responses and socket events both come through here. The store
@@ -37,16 +44,25 @@ export const useRoomsStore = defineStore('rooms', () => {
   }
 
   async function load(): Promise<void> {
-    loadCount += 1
-    const loadId = loadCount
-    status.value = 'loading'
+    started += 1
+    const loadId = started
+    pending.value += 1
+    if (status.value === 'idle') status.value = 'loading'
     try {
       const { rooms } = await requestJson<{ rooms: Room[] }>('/api/rooms')
       rooms.forEach(upsert)
-      if (loadId === loadCount) status.value = 'ready'
+      settle(loadId, 'ready')
     } catch {
-      if (loadId === loadCount) status.value = 'error'
+      settle(loadId, 'error')
+    } finally {
+      pending.value -= 1
     }
+  }
+
+  function settle(loadId: number, result: LoadStatus): void {
+    if (loadId < settled) return
+    settled = loadId
+    status.value = result
   }
 
   /**
@@ -68,5 +84,5 @@ export const useRoomsStore = defineStore('rooms', () => {
     return room
   }
 
-  return { byId, status, list, upsert, load, ensureLoaded, create }
+  return { byId, status, loading, list, upsert, load, ensureLoaded, create }
 })

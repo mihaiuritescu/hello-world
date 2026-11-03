@@ -103,7 +103,39 @@ describe('rooms store', () => {
     expect(rooms.list).toEqual([room(3)])
   })
 
-  it('lets only the newest load decide the status, while an older one still adds its rooms', async () => {
+  it('keeps the last result while it loads again, and says that a load is under way', async () => {
+    const reload = deferred<{ rooms: Room[] }>()
+    requestJsonMock.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(reload.promise)
+    const rooms = useRoomsStore()
+    await rooms.load()
+
+    const reloading = rooms.load()
+
+    expect(rooms.status).toBe('error')
+    expect(rooms.loading).toBe(true)
+    reload.resolve({ rooms: [room(1)] })
+    await reloading
+    expect(rooms.status).toBe('ready')
+    expect(rooms.loading).toBe(false)
+  })
+
+  it('reports a failure at once, even while a newer load still runs', async () => {
+    const newer = deferred<{ rooms: Room[] }>()
+    requestJsonMock.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(newer.promise)
+    const rooms = useRoomsStore()
+    const olderLoad = rooms.load()
+    const newerLoad = rooms.load()
+
+    await olderLoad
+
+    // Polls that overlap would otherwise hide every failure behind the next attempt.
+    expect(rooms.status).toBe('error')
+    newer.resolve({ rooms: [] })
+    await newerLoad
+    expect(rooms.status).toBe('ready')
+  })
+
+  it('ignores the status of a load that settles after a newer one, but keeps its rooms', async () => {
     const older = deferred<{ rooms: Room[] }>()
     requestJsonMock.mockReturnValueOnce(older.promise).mockRejectedValueOnce(new Error('offline'))
     const rooms = useRoomsStore()

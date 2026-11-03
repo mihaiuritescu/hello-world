@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { formatMessageDate } from '../../lib/formatMessageDate.ts'
 import type { LoadStatus } from '../../stores/rooms.ts'
 
-const props = defineProps<{ messages: Message[]; status: LoadStatus }>()
+const props = defineProps<{ messages: Message[]; status: LoadStatus; loading?: boolean }>()
 const emit = defineEmits<{ retry: [] }>()
 
 // Messages already here stay on screen while a reload runs. A failed load always shows, with
@@ -49,7 +49,7 @@ defineExpose({ scrollToBottom })
         messages.length > 0 ? "Couldn't load the latest messages." : "Couldn't load the messages."
       }}
     </p>
-    <v-btn variant="tonal" @click="emit('retry')">Retry</v-btn>
+    <v-btn variant="tonal" :loading="loading" @click="emit('retry')">Retry</v-btn>
   </div>
   <div v-if="showProgress" class="message-state">
     <v-progress-linear indeterminate aria-label="Loading messages" />
