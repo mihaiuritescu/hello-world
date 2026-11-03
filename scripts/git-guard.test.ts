@@ -30,6 +30,29 @@ describe('git guard', () => {
     'git status | git clean -f',
     'bash -c "git push --force"',
     'echo $(git reset --hard)',
+    // git accepts any unambiguous prefix of a long option.
+    'git push --force-w origin main',
+    'git push --mirro origin',
+    'git push --dele origin main',
+    'git reset --ha',
+    // Escapes that the shell removes before git sees the word.
+    'git push origin main --f\\orce',
+    'git push origin main --f`orce',
+    'g\\it push -f',
+    'git push origin main --f$X',
+    'git push origin $FLAGS',
+    // git's own ways to run another command.
+    'git rebase -x "aws sts get-caller-identity" HEAD~1',
+    'git rebase --exec "aws sts get-caller-identity" HEAD~1',
+    'git bisect run aws sts get-caller-identity',
+    'git difftool -x "aws sts get-caller-identity"',
+    'git submodule foreach "aws sts get-caller-identity"',
+    'git filter-branch --tree-filter "rm -rf ." HEAD',
+    'git grep --open-files-in-pager=aws secret',
+    'git grep -Oaws secret',
+    // Ignored files, such as .env, must never be committed.
+    'git add -f .env',
+    'git add --force .env',
   ])('blocks %j', (command) => {
     expect(blockedReason(command)).not.toBeNull()
   })
@@ -49,6 +72,12 @@ describe('git guard', () => {
     "git commit -q -F - << 'EOF'\nfix: a subject\n\ngit push --force stays blocked\nEOF",
     'echo git push --force',
     'grep -n "git reset --hard" README.md',
+    'git push --follow-tags origin main',
+    'git push --dry-run origin main',
+    'git rebase main',
+    'git bisect start',
+    'git add .env.example src/server/app.ts',
+    'git grep -n rateLimit',
   ])('lets %j run', (command) => {
     expect(blockedReason(command)).toBeNull()
   })
