@@ -113,6 +113,50 @@ describe('ChatPanel', () => {
     expect(screen.getByRole('listitem')).toHaveTextContent('Hello, world')
   })
 
+  it('shows a reopened room as loading, not as it was on the last visit', async () => {
+    const reload = deferred<{ messages: Message[] }>()
+    requestJsonMock
+      .mockResolvedValueOnce({ messages: [] })
+      .mockResolvedValueOnce({ messages: [] })
+      .mockReturnValueOnce(reload.promise)
+    const { wrapper, screen } = renderPanel(room(7))
+    await flushPromises()
+    expect(screen.getByText('No messages yet')).toBeInTheDocument()
+
+    await wrapper.setProps({ room: room(8) })
+    await flushPromises()
+    await wrapper.setProps({ room: room(7) })
+    await flushPromises()
+
+    // Others may have posted since the last visit.
+    expect(screen.queryByText('No messages yet')).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Loading messages' })).toBeInTheDocument()
+    reload.resolve({ messages: [message] })
+    await flushPromises()
+    expect(screen.getByRole('listitem')).toHaveTextContent('Hello, world')
+  })
+
+  it("doesn't show a reopened room's old error while it loads again", async () => {
+    const reload = deferred<{ messages: Message[] }>()
+    requestJsonMock
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ messages: [] })
+      .mockReturnValueOnce(reload.promise)
+    const { wrapper, screen } = renderPanel(room(7))
+    await flushPromises()
+    // The composer's fields have alert regions of their own, so the error is found by its text.
+    expect(screen.getByText("Couldn't load the messages.")).toBeInTheDocument()
+
+    await wrapper.setProps({ room: room(8) })
+    await flushPromises()
+    await wrapper.setProps({ room: room(7) })
+    await flushPromises()
+
+    expect(screen.queryByText("Couldn't load the messages.")).not.toBeInTheDocument()
+    reload.resolve({ messages: [] })
+    await flushPromises()
+  })
+
   it('loads the messages of each room it opens', async () => {
     const { wrapper } = renderPanel(room(7))
 

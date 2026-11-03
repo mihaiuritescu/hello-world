@@ -84,6 +84,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     openRoomId = roomId
     refused.value = false
     if (roomId === null) return
+    messages.markLoading(roomId)
     if (status.value === 'live') await subscribeAndLoad(roomId)
     else await messages.load(roomId)
   }

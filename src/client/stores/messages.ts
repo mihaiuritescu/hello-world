@@ -37,6 +37,14 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   /**
+   * Shows a room as loading from the moment it opens, until its new load settles. Its last result
+   * is from an earlier visit: others may have posted since, and its error may be gone.
+   */
+  function markLoading(roomId: number): void {
+    statusByRoom.value.set(roomId, 'loading')
+  }
+
+  /**
    * Adds or replaces a message, keeping a room's newest `LIMITS.loadedMessages`, as a fresh load
    * would. HTTP responses and socket events both come through here. Live messages only ever add
    * up, so without the cap a flooded room would grow an open tab without end.
@@ -96,5 +104,5 @@ export const useMessagesStore = defineStore('messages', () => {
     return message
   }
 
-  return { byId, statusByRoom, listFor, statusOf, isLoading, upsert, load, send }
+  return { byId, statusByRoom, listFor, statusOf, isLoading, markLoading, upsert, load, send }
 })
