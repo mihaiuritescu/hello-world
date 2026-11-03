@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import type { Message } from '#shared/domain.ts'
+import Fastify from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetDatabase } from '../test/reset-db.ts'
 import {
@@ -12,7 +13,7 @@ import {
   type TestSocket,
 } from '../test/socket-client.ts'
 import { createTestApp, type TestApp } from '../test/test-app.ts'
-import { closeWhenStalled } from './socket-server.ts'
+import { attachSocketServer, closeWhenStalled } from './socket-server.ts'
 
 describe('real-time delivery', () => {
   let testApp: TestApp
@@ -232,6 +233,32 @@ describe('closeWhenStalled', () => {
     connection.emit('packetCreate')
 
     expect(connection.close).toHaveBeenCalledWith(true)
+  })
+
+  it("cuts off a real connection once Engine.IO's queue for it passes the limit", async () => {
+    // A bare app, so the test can announce directly. 600 announcements in one tick queue up
+    // faster than the transport can send them, as for a client that stopped reading. This
+    // checks the parts of Engine.IO that closeWhenStalled relies on, which aren't public.
+    const bare = Fastify()
+    const broadcaster = attachSocketServer(bare, {
+      publicHost: null,
+      trustedProxies: null,
+      socketsPerAddress: 10,
+      subscriptionsPerMinute: 60,
+    })
+    await bare.listen({ host: '127.0.0.1', port: 0 })
+    const socket = await connectTo(portOf(bare))
+    try {
+      const dropped = new Promise<string>((resolve) => socket.once('disconnect', resolve))
+      const room = { id: 1, lat: 1, lng: 1, createdAt: '2026-11-03T10:00:00.000Z' }
+
+      for (let sent = 0; sent < 600; sent += 1) broadcaster.roomCreated(room)
+
+      expect(await dropped).toBe('transport close')
+    } finally {
+      socket.disconnect()
+      await bare.close()
+    }
   })
 })
 

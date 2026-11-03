@@ -13,8 +13,11 @@ type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>
 /** The parts of an Engine.IO connection, under each Socket.IO one, that this file uses. */
 interface EngineConnection {
   request: IncomingMessage
-  /** Packets waiting for the client to take them. */
-  writeBuffer: unknown[]
+  /**
+   * Packets waiting for the client to take them. Engine.IO keeps this private, so it's read with
+   * care, and the tests check it against a real engine.
+   */
+  writeBuffer?: unknown[]
   on(event: 'packetCreate', listener: () => void): void
   once(event: 'close', listener: () => void): void
   close(discard: boolean): void
@@ -150,8 +153,9 @@ export function closeWhenStalled(
   maxBacklog = MAX_BACKLOG,
 ): void {
   // The engine announces each packet just before it queues it.
+  // A missing queue (a changed Engine.IO) must not throw here, inside every broadcast.
   connection.on('packetCreate', () => {
-    if (connection.writeBuffer.length >= maxBacklog) connection.close(true)
+    if ((connection.writeBuffer?.length ?? 0) >= maxBacklog) connection.close(true)
   })
 }
 
