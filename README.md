@@ -65,7 +65,7 @@ Every setting has a working default for local runs, so no `.env` file is needed.
 |---|---|---|
 | Unit | Vitest, jsdom, Vue Test Utils | Stores (duplicates dropped, order by id, retries reusing one `clientId`), schemas, helpers and components |
 | Integration | Vitest against MySQL | Every route through `app.inject()`, rate limits, migrations, and Socket.IO delivery and caps on a real port |
-| End-to-end | Playwright: Chromium for all tests, WebKit for the `@smoke` ones | FR-1 to FR-6 in a real browser, two windows for real time, and axe WCAG 2.2 AA scans of each screen and error state |
+| End-to-end | Playwright: Chromium for all tests, WebKit for the `@smoke` ones | FR-1 to FR-6 in a real browser, two windows for real time, and axe WCAG 2.2 AA scans of the start screen, an open room, a long chat, and the room list and messages failing to load |
 
 - `pnpm test` runs the unit and integration tests, with MySQL running (`pnpm db:up`).
 - `pnpm test:e2e` runs the end-to-end tests against the production build, on their own database, with the map tiles stubbed.
@@ -112,7 +112,7 @@ The demo deploys to AWS: one EC2 instance behind Caddy and Let's Encrypt, with R
 - **Real time,** the brief's optional part: other windows see new pins and messages within a second, and catch up after a lost connection. A chip shows whether the connection is live.
 - **Duplicate-safe sending:** sending a failed message again never stores it twice.
 - **Deep links** (`?room=3`) and a remembered name.
-- **Keyboard access:** Enter on the focused map creates a room, and Enter on a pin opens it. axe scans every screen in CI.
+- **Keyboard access:** Enter on the focused map creates a room, and Enter on a pin opens it. axe scans the main screens and the load errors in CI.
 - **Loading, empty and error states,** with Retry.
 - **Rate limits per client,** on the API and on the WebSockets.
 - **A live AWS demo,** with HTTPS, from one CloudFormation stack, and a cost estimate for staging and production.
