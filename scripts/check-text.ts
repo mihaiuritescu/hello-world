@@ -15,8 +15,13 @@ export interface HiddenCharacter {
 }
 
 const HIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/gu
-/** Control characters that are ordinary in text: tabs, and the carriage returns of CRLF. */
-const ORDINARY = new Set(['\t', '\r'])
+/**
+ * Control characters that are ordinary in text: tabs, and the carriage return that ends a CRLF
+ * line. Anywhere else, a carriage return ends a line in JavaScript but not on screen.
+ */
+function isOrdinary(character: string, index: number, line: string): boolean {
+  return character === '\t' || (character === '\r' && index === line.length - 1)
+}
 /** Files skipped as binary, by extension: the ones .gitattributes marks, and their kin. */
 const BINARY = /\.(png|jpe?g|gif|ico|webp|avif|pdf|woff2?|ttf|otf|zip|gz)$/i
 
@@ -24,7 +29,7 @@ const BINARY = /\.(png|jpe?g|gif|ico|webp|avif|pdf|woff2?|ttf|otf|zip|gz)$/i
 export function findHiddenCharacters(text: string): HiddenCharacter[] {
   return text.split('\n').flatMap((line, index) =>
     [...line.matchAll(HIDDEN)]
-      .filter((match) => !ORDINARY.has(match[0]))
+      .filter((match) => !isOrdinary(match[0], match.index, line))
       .map((match) => ({
         line: index + 1,
         column: match.index + 1,

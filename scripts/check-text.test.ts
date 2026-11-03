@@ -40,6 +40,12 @@ describe('findHiddenCharacters', () => {
     ])
   })
 
+  it('reports a carriage return inside a line, which ends it in JavaScript, but not a CRLF', () => {
+    const text = 'deleteAll() //\r// TODO: tidy up\nok\r\n'
+
+    expect(findHiddenCharacters(text)).toEqual([{ line: 1, column: 15, codePoint: 'U+000D' }])
+  })
+
   it('reports zero-width characters, byte-order marks and line separators', () => {
     const text = `${BYTE_ORDER_MARK}a${ZERO_WIDTH_SPACE}b\nc${LINE_SEPARATOR}d`
 
