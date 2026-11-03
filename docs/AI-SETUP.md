@@ -17,7 +17,7 @@ How this project uses AI coding tools, and how to reproduce it. The rules themse
 | [`AGENTS.md`](../AGENTS.md) | Commands, repository map, architecture rules, conventions, database, testing, security, dependency and cloud-safety rules, slices and definition of done |
 | [`CLAUDE.md`](../CLAUDE.md) | Imports `AGENTS.md` and the PRD, then sets the working loop and the Windows gotchas |
 | [`.claude/rules/`](../.claude/rules) | Rules scoped by path, loaded for matching files: client (Vue, Vuetify, Leaflet), server (Node, Fastify, MySQL), tests, and infrastructure |
-| [`.claude/settings.json`](../.claude/settings.json) | Permissions. **Allowed:** tests, lint, `docker compose up` and git. **Asked first:** new packages and `docker compose down`. **Denied:** reading `.env` and `~/.aws` with Claude's file tools, force-pushes and `git reset --hard` written plainly, and every `aws` and `gh` command |
+| [`.claude/settings.json`](../.claude/settings.json) | Permissions. **Allowed:** tests, lint, `docker compose up`, and everyday git: status, diff, log, show, add, commit, push, stash and the plumbing for split commits. **Asked first:** new packages, `docker compose down` and any other git command. **Denied:** reading `.env` and `~/.aws` with Claude's file tools, force-pushes and `git reset --hard` written plainly, and every `aws` and `gh` command |
 | [`.claude/hooks/format-file.mjs`](../.claude/hooks/format-file.mjs) | After every edit, runs Prettier and ESLint's fixes on the file, and reports what ESLint can't fix |
 | [`.claude/hooks/stop-gate.mjs`](../.claude/hooks/stop-gate.mjs) | Before a turn ends, type-checks and lints the changed files. On failure it blocks once, then only warns |
 | [`scripts/git-guard.ts`](../scripts/git-guard.ts) | Before every shell command, blocks force-pushes and branch deletions, `git reset --hard`, `git clean`, `git add --force`, `git -c`, `git config` writes, and every git option that runs another program. It catches them however the flags are spelled: anywhere in the command, abbreviated or escaped. Permission rules only match the start of a command, so they can't do this alone. It's a safety net, not a sandbox |
@@ -37,7 +37,7 @@ How this project uses AI coding tools, and how to reproduce it. The rules themse
 ## What people decide
 
 - **Product and stack:** Vue, Pinia and Vuetify; MySQL on RDS; one EC2 instance; free packages only.
-- **Approvals:** every plan and new package. Git runs without prompts, but a push happens only when a person asks for it.
+- **Approvals:** every plan, every new package and any unusual git command. Everyday git runs without prompts, but a push happens only when a person asks for it.
 - **AWS:** every command. Claude writes the runbook, and a person runs it with no AI session open while signed in.
 - **GitHub:** the protection of `main` against force-pushes, the guard that nothing on this machine can talk around. Only the owner can turn it on.
 - **Reviews:** what to fix and what to defer, recorded in the triage note.
