@@ -29,15 +29,20 @@ onMounted(async () => {
 
 /** Opens the room a link names: it may be older than the rooms the list holds, or not exist. */
 async function openLinkedRoom(roomId: number): Promise<void> {
+  const title = roomTitle({ id: roomId })
   try {
     await rooms.ensureLoaded(roomId)
-  } catch {
-    errorMessage.value = `Couldn't open ${roomTitle({ id: roomId })}. Please reload the page.`
+  } catch (error) {
+    // The user may have picked another room while this one was on its way.
+    if (session.selectedRoomId !== roomId) return
+    errorMessage.value = isRateLimited(error)
+      ? `Too many requests from your network just now. Wait a minute, then reload the page to open ${title}.`
+      : `Couldn't open ${title}. Please reload the page.`
     return
   }
   // Unless the user has already picked another room, a link to no room leaves the start screen.
   if (!rooms.byId.has(roomId) && session.selectedRoomId === roomId) {
-    errorMessage.value = `${roomTitle({ id: roomId })} doesn't exist.`
+    errorMessage.value = `${title} doesn't exist.`
     session.selectRoom(null)
   }
 }

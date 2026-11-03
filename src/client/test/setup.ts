@@ -8,6 +8,10 @@ class ResizeObserverStub {
 }
 globalThis.ResizeObserver ??= ResizeObserverStub
 
+// Vuetify's overlays, such as the snackbar, read the visual viewport. Null makes them use the
+// window instead.
+globalThis.visualViewport ??= null
+
 if (!('matchMedia' in window)) {
   Object.defineProperty(window, 'matchMedia', {
     value: (query: string): MediaQueryList => ({
