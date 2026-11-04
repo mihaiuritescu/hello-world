@@ -107,7 +107,10 @@ export const useRoomsStore = defineStore('rooms', () => {
       if (loadId > newestListed) {
         newestListed = loadId
         rooms.forEach(put)
-        dropMissing(rooms, askedAt)
+        // A full list leaves out the rooms older than its oldest; any other list holds them all.
+        const oldestListed = rooms.length < LIMITS.listedRooms ? 0 : (rooms[0]?.id ?? 0)
+        dropMissing(rooms, askedAt, oldestListed)
+        await refreshOpenRoom(oldestListed)
       } else {
         for (const room of rooms) if (byId.value.has(room.id)) put(room)
       }
@@ -125,12 +128,27 @@ export const useRoomsStore = defineStore('rooms', () => {
    * asked for stay, as they may be newer than it. So do rooms older than a full list, which it
    * doesn't cover, such as an old room opened from a link.
    */
-  function dropMissing(rooms: Room[], askedAt: number): void {
+  function dropMissing(rooms: Room[], askedAt: number, oldestListed: number): void {
     const listed = new Set(rooms.map((room) => room.id))
-    const oldestListed = rooms.length < LIMITS.listedRooms ? 0 : (rooms[0]?.id ?? 0)
     for (const id of [...byId.value.keys()]) {
       if (id < oldestListed || listed.has(id) || (confirmedAt.get(id) ?? 0) > askedAt) continue
       remove(id)
+    }
+  }
+
+  /**
+   * Reads the open room again when it's older than the list, which then says nothing about it, so
+   * a rename or a delete missed while disconnected still reaches it (I2). A room not here yet,
+   * which a link is still opening, is left to `ensureLoaded`.
+   */
+  async function refreshOpenRoom(oldestListed: number): Promise<void> {
+    const roomId = session.selectedRoomId
+    if (roomId === null || roomId >= oldestListed || !byId.value.has(roomId)) return
+    try {
+      upsert(await requestJson<Room>(`/api/rooms/${roomId}`))
+    } catch (error) {
+      // Any other failure leaves the room as it was, until the next reload tries again.
+      if (isRoomGone(error)) remove(roomId)
     }
   }
 

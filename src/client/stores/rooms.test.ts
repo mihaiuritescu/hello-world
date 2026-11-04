@@ -183,6 +183,62 @@ describe('rooms store', () => {
     expect(rooms.isDeleted(1)).toBe(false)
   })
 
+  describe('an open room older than a full list', () => {
+    const newest = Array.from({ length: LIMITS.listedRooms }, (_, index) => room(index + 2))
+
+    /** Room 1, opened from a link earlier, and a reload whose full list leaves it out. */
+    function reloadWithOldRoomOpen(openRoom: () => Promise<unknown>) {
+      window.history.replaceState(null, '', '/?room=1')
+      const rooms = useRoomsStore()
+      rooms.upsert(room(1))
+      requestJsonMock.mockImplementation((path: string) =>
+        path === '/api/rooms' ? Promise.resolve({ rooms: newest }) : openRoom(),
+      )
+      return rooms
+    }
+
+    it('is read again on a reload, so a delete missed meanwhile still reaches it (I2)', async () => {
+      const rooms = reloadWithOldRoomOpen(() =>
+        Promise.reject(new ApiError(404, 'ROOM_NOT_FOUND', 'Room 1 does not exist.')),
+      )
+
+      await rooms.load()
+
+      expect(requestJsonMock).toHaveBeenCalledWith('/api/rooms/1')
+      expect(rooms.isDeleted(1)).toBe(true)
+    })
+
+    it('is read again on a reload, so a rename missed meanwhile still reaches it', async () => {
+      const rooms = reloadWithOldRoomOpen(() =>
+        Promise.resolve(room(1, { name: 'Picnic', revision: 1 })),
+      )
+
+      await rooms.load()
+
+      expect(rooms.byId.get(1)?.name).toBe('Picnic')
+    })
+
+    it('stays as it was when reading it again fails', async () => {
+      const rooms = reloadWithOldRoomOpen(() => Promise.reject(new Error('offline')))
+
+      await rooms.load()
+
+      expect(rooms.byId.get(1)).toEqual(room(1))
+      expect(rooms.status).toBe('ready')
+    })
+  })
+
+  it('reads the open room only from the list when the list covers it', async () => {
+    window.history.replaceState(null, '', '/?room=1')
+    const rooms = useRoomsStore()
+    rooms.upsert(room(1))
+    requestJsonMock.mockResolvedValue({ rooms: [room(1), room(2)] })
+
+    await rooms.load()
+
+    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+  })
+
   it('lets a list that answers after a newer one add no rooms: they may be deleted since', async () => {
     const older = deferred<{ rooms: Room[] }>()
     const newer = deferred<{ rooms: Room[] }>()
