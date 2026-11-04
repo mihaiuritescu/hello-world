@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents, and for humans, working on **Hello World**, a real-time chat on a world map. This file is tool-agnostic; `CLAUDE.md` imports it.
 
-Read [`docs/PRD.md`](docs/PRD.md) first. It holds the requirements (FR-1 to FR-6) and the real-time invariants (I1 to I7) referenced below.
+Read [`docs/PRD.md`](docs/PRD.md) first. It holds the requirements (FR-1 to FR-10) and the invariants (I1 to I8) referenced below.
 
 > Drafted on 2026-10-30, before the scaffold. The commands and the `.claude/` tooling arrive with slice S0.
 
@@ -88,6 +88,7 @@ Integration tests need MySQL, so run `pnpm db:up` first.
 - **Never log** message bodies, author names or secrets.
 - **No hidden characters in the source.** Write bidirectional controls and zero-width characters as Unicode escapes, never raw. `pnpm check:text` fails on raw ones.
 - **Never commit secrets.** Configuration comes from environment variables, documented in `.env.example`.
+- **Room owner tokens:** creating a room returns its owner token in that one response. Renames and deletes send it as `Authorization: Bearer`, and the database keeps only its SHA-256. Never log the header, broadcast the token or return it anywhere else.
 - **Headers:** `@fastify/helmet` owns the security headers. HTTPS-only headers turn on when `PUBLIC_URL` uses https.
 
 ## Dependencies

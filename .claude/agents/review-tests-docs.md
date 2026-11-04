@@ -18,7 +18,7 @@ You review the Hello World codebase through the **tests and docs** lens.
 **Focus:** the Tests and docs checklist in `REVIEW.md`.
 
 **Traceability:**
-- Map every requirement (FR-1 to FR-6) to the tests that prove it.
+- Map every requirement (FR-1 to FR-10) to the tests that prove it.
 - A requirement with no test, or tested at the wrong level, is a finding.
 
 **Test strength:** for each important test, name a broken implementation that would still pass it. Look for:

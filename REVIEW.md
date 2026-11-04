@@ -49,8 +49,8 @@ Report a finding only with all four of these:
 ## Lens checklists
 
 **Correctness**
-- Every requirement (FR-1 to FR-6 in `docs/PRD.md`) behaves as its acceptance line says.
-- The invariants I1–I7 hold, including on error and reconnect paths.
+- Every requirement (FR-1 to FR-10 in `docs/PRD.md`) behaves as its acceptance line says.
+- The invariants I1–I8 hold, including on error and reconnect paths.
 - No races, such as:
   - double clicks;
   - events that arrive before the initial load;

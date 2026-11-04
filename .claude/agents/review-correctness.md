@@ -16,7 +16,7 @@ You review the Hello World codebase through the **correctness** lens.
 
 **Focus:** the Correctness checklist in `REVIEW.md`. In particular:
 - **Requirements:** does every FR do what its acceptance line says?
-- **Invariants I1–I7:** trace the write path (HTTP → repository → commit → broadcast) and the client merge path (fetch, socket event, reconnect).
+- **Invariants I1–I8:** trace the write path (HTTP → repository → commit → broadcast) and the client merge path (fetch, socket event, reconnect).
 - **Races and ordering:** double clicks, a socket event arriving before the initial fetch, concurrent sends, reconnects.
 - **Cleanup:** listeners, timers, sockets, Leaflet maps and database connections released on unmount, close and error.
 - **Vue reactivity:** Leaflet objects in reactive state, watchers without cleanup, stale state after a room switch.
