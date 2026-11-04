@@ -18,6 +18,15 @@ const NEAR_AND_FAR = [
   { lat: 46.77, lng: 23.72 },
 ]
 
+// An iPad mini held upright: the panel's left edge sits just left of the map's centre.
+const TABLET = { width: 744, height: 1133 }
+
+// About 760 metres apart, east to west: one spot left of the panel at the opening zoom.
+const WESTERN_PAIR = [
+  { lat: 47, lng: 15 },
+  { lat: 47, lng: 15.01 },
+]
+
 function pin(page: Page, id: number) {
   return page.getByTitle(`Chatroom ${id}`)
 }
@@ -122,6 +131,52 @@ test.describe('pin clusters (FR-7)', () => {
       await expect(pin(page, id)).toBeInViewport({ ratio: 1 })
       expect(await below(pin(page, id), panel)).toBe(true)
     }
+  })
+
+  test('on a tablet, zooming in on a circle keeps its rooms clear of a tall chat panel', async ({
+    page,
+  }) => {
+    await page.setViewportSize(TABLET)
+    // Room 3, far away in Lisbon, is open with a long chat: the panel takes the map's height and
+    // leaves only the strip on its left.
+    await seedRoomsAt([...WESTERN_PAIR, { lat: 38.72, lng: -9.14 }])
+    await seedMessages(3, 30)
+    await page.goto('/?room=3')
+    await expect(
+      page.getByRole('log', { name: 'Messages' }).getByText('Message 30', { exact: true }),
+    ).toBeVisible()
+
+    await page.getByRole('button', { name: '2 chatrooms' }).click()
+
+    const panel = page.getByRole('complementary', { name: 'Chat' })
+    for (const id of [1, 2]) {
+      await expect(pin(page, id)).toBeInViewport({ ratio: 1 })
+      expect(await overlap(pin(page, id), panel)).toBe(false)
+    }
+  })
+
+  test("opening a room from a circle keeps the circle's other rooms clear of the panel", async ({
+    page,
+  }) => {
+    // East to west, wider than tall: below the short start panel they would fit a level deeper,
+    // but the panel grows down over that space as soon as room 1 opens with its long chat.
+    await seedRoomsAt([
+      { lat: 47, lng: 15 },
+      { lat: 47, lng: 15.04 },
+    ])
+    await seedMessages(1, 30)
+    await page.goto('/')
+    await page.getByRole('button', { name: '2 chatrooms' }).click()
+
+    await pin(page, 1).click()
+
+    await expect(
+      page.getByRole('log', { name: 'Messages' }).getByText('Message 30', { exact: true }),
+    ).toBeVisible()
+    await expect(pin(page, 2)).toBeInViewport({ ratio: 1 })
+    expect(await overlap(pin(page, 2), page.getByRole('complementary', { name: 'Chat' }))).toBe(
+      false,
+    )
   })
 
   test('a click on a circle zooms in even when the window is too short to fit its rooms', async ({

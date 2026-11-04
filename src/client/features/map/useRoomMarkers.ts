@@ -195,28 +195,27 @@ export function useRoomMarkers(
   }
 
   /**
-   * The paddings that keep zoomed-in rooms away from the map's edges and from under the panel:
-   * left of it when it sits on the right, as on a wide screen, and below it when it spans the
-   * map's width, as on a phone. The panel is ignored when avoiding it would leave too little room.
+   * The paddings that keep zoomed-in rooms away from the map's edges and from under the panel.
+   * The panel floats top right and grows downwards as a room opens, so the strip left of it stays
+   * free whatever opens next: it comes first, when wide enough, even on a tablet whose panel
+   * reaches past the map's middle. Then the space below the panel, as on a phone, where the panel
+   * spans nearly the map's width. The panel is ignored when avoiding it would leave too little
+   * room.
    */
   function freeAreaPadding(instance: L.Map): { topLeft: L.Point; bottomRight: L.Point } {
     const margin = L.point(ZOOM_PADDING_PX, ZOOM_PADDING_PX)
-    const padding = { topLeft: margin, bottomRight: margin }
     const panel = cover.value?.getBoundingClientRect()
-    if (!panel) return padding
+    if (!panel) return { topLeft: margin, bottomRight: margin }
     const area = instance.getContainer().getBoundingClientRect()
-    if (panel.left > area.left + area.width / 2) {
-      const right = area.right - panel.left + ZOOM_PADDING_PX
-      if (area.width - right - ZOOM_PADDING_PX >= MIN_FREE_PX) {
-        padding.bottomRight = L.point(right, ZOOM_PADDING_PX)
-      }
-    } else {
-      const top = panel.bottom - area.top + ZOOM_PADDING_PX
-      if (area.height - top - ZOOM_PADDING_PX >= MIN_FREE_PX) {
-        padding.topLeft = L.point(ZOOM_PADDING_PX, top)
-      }
+    const right = area.right - panel.left + ZOOM_PADDING_PX
+    if (area.width - right - ZOOM_PADDING_PX >= MIN_FREE_PX) {
+      return { topLeft: margin, bottomRight: L.point(right, ZOOM_PADDING_PX) }
     }
-    return padding
+    const top = panel.bottom - area.top + ZOOM_PADDING_PX
+    if (area.height - top - ZOOM_PADDING_PX >= MIN_FREE_PX) {
+      return { topLeft: L.point(ZOOM_PADDING_PX, top), bottomRight: margin }
+    }
+    return { topLeft: margin, bottomRight: margin }
   }
 
   function highlight(roomId: number | null): void {
