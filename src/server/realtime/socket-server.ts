@@ -150,6 +150,9 @@ export function attachSocketServer(
     roomUpdated: (room) => {
       io.emit('room:updated', room)
     },
+    roomDeleted: (roomId) => {
+      io.emit('room:deleted', { id: roomId })
+    },
     messageCreated: (message) => {
       io.to(roomChannel(message.roomId)).emit('message:created', message)
     },

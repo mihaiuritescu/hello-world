@@ -12,6 +12,7 @@ A real-time chat on a world map: click anywhere to drop a pin, open its chatroom
 - **Open a room:** click its pin, or focus the pin and press Enter. The open room's pin turns red, and the panel shows the room's latest 100 messages.
 - **Busy areas:** zoomed out, pins that would overlap merge into a circle that shows how many chatrooms it holds. Click it, or focus it and press Enter, to zoom in until its pins separate. The open room's pin always stays a pin.
 - **Rename your room:** the browser that created a room sees a pencil next to its title. A name has up to 40 characters, and saving an empty one brings back "Chatroom N". A renamed room keeps its number under the name, so no name can pass for another room.
+- **Delete your room:** while a room you created has no messages, a bin next to its title deletes it, after you confirm. Its pin disappears for everyone, and any window that has it open goes back to the start screen and says so. After the first message, the room stays.
 - **Post a message:** write your name and a message, then press Submit or Enter. The message field clears for the next one, and your name is remembered on this device.
 - **Send again safely:** if a send fails, your draft stays in the field. Sending it again never posts it twice.
 - **Live updates:** open the app in two windows. New pins, and new messages in the room you have open, show up in both within a second. The chip next to the room title says **Live**, or **Reconnecting…** while the app catches up; without a live connection, it refreshes every 10 seconds.
@@ -69,8 +70,8 @@ Every setting has a working default for local runs, so no `.env` file is needed.
 | Level | Tools | What it proves |
 |---|---|---|
 | Unit | Vitest, jsdom, Vue Test Utils | Stores (duplicates dropped, order by id, retries reusing one `clientId`), schemas, helpers and components |
-| Integration | Vitest against MySQL | Every route through `app.inject()`, rate limits, migrations, and Socket.IO delivery and caps on a real port |
-| End-to-end | Playwright: Chromium for all tests, WebKit for the `@smoke` ones | FR-1 to FR-6 in a real browser, two windows for real time, and axe WCAG 2.2 AA scans of the start screen, an open room, a long chat, and the room list and messages failing to load |
+| Integration | Vitest against MySQL | Every route through `app.inject()`, rate limits, migrations, a delete racing a message under real InnoDB locks, and Socket.IO delivery, caps and online counts on a real port |
+| End-to-end | Playwright: Chromium for all tests, WebKit for the `@smoke` ones | FR-1 to FR-10 in a real browser, two windows for real time and the online count, and axe WCAG 2.2 AA scans of the start screen, an open room, the rename form, the delete confirmation, a pin cluster, a long chat, and the room list and messages failing to load |
 
 - `pnpm test` runs the unit and integration tests, with MySQL running (`pnpm db:up`).
 - `pnpm test:e2e` runs the end-to-end tests against the production build, on their own database, with the map tiles stubbed.
@@ -80,12 +81,13 @@ Every setting has a working default for local runs, so no `.env` file is needed.
 
 ```
 browser ──HTTP──► Fastify: the built SPA and the REST API ──► MySQL 8.4
-        ◄──WS───  Socket.IO: room:created, room:updated, message:created, presence:changed
+        ◄──WS───  Socket.IO: room:created, room:updated, room:deleted, message:created,
+                  presence:changed
 ```
 
 - **One process, one origin.** One Node process serves the SPA, the REST API and the WebSocket, so there's no CORS, and one image runs everywhere.
 - **Writes go over REST.** Only after the database commit does the server announce them over Socket.IO, to everyone or to the room's channel.
-- **One data path on the client.** Pinia stores hold all server data. HTTP responses and socket events go through the same upsert, which drops duplicates and orders by id.
+- **One data path on the client.** Pinia stores hold all server data. HTTP responses and socket events go through the same upsert, which drops duplicates, keeps a room's newest revision, never brings back a deleted room, and orders by id.
 - **Subscribe, then read.** Opening a room subscribes, then loads its messages; a reconnect does both again. Without a socket, the client polls every 10 seconds.
 
 The [PRD](docs/PRD.md) has the decisions and the invariants behind them.
@@ -115,7 +117,7 @@ The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behin
 ## Beyond the brief
 
 - **Real time,** the brief's optional part: other windows see new pins and messages within a second, and catch up after a lost connection. A chip shows whether the connection is live.
-- **Renaming by the room's creator,** without accounts: creating a room returns a secret token that stays in that browser, and the server keeps only its SHA-256. Names render as plain text everywhere, and every query is parameterised.
+- **Renaming, and deleting while empty, by the room's creator,** without accounts: creating a room returns a secret token that stays in that browser, and the server keeps only its SHA-256. Names render as plain text everywhere, and every query is parameterised.
 - **Pin clusters,** computed in the browser without a map plugin, keyboard-accessible like the pins.
 - **A header with a live online count,** sent at most once a second, so a wave of reconnects can't flood the clients.
 - **Duplicate-safe sending:** sending a failed message again never stores it twice.
@@ -129,7 +131,7 @@ The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behin
 ## Limitations
 
 - **Anyone can post under any name:** there are no accounts, by design for v1.
-- **A room belongs to the browser that created it:** clearing that browser's site data, or switching to another browser, gives up the right to rename it.
+- **A room belongs to the browser that created it:** clearing that browser's site data, or switching to another browser, gives up the right to rename or delete it.
 - **No moderation:** rate and length limits are the only protection against spam.
 - **Rate limits count by IP address,** so people behind one address share them.
 - **One server instance.** The way to scale out, with a load balancer and a shared Socket.IO adapter, is in [Infrastructure and costs](docs/INFRASTRUCTURE.md).

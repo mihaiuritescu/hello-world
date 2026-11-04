@@ -1,6 +1,8 @@
-import type { CreatedRoom, Room } from '#shared/domain.ts'
-import { sql } from 'kysely'
+import { randomUUID } from 'node:crypto'
+import type { CreatedRoom, Message, Room } from '#shared/domain.ts'
+import { sql, type Kysely } from 'kysely'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import type { Database } from '../db/database.ts'
 import { silentBroadcaster, type Broadcaster } from '../realtime/broadcaster.ts'
 import { resetDatabase } from '../test/reset-db.ts'
 import { createTestApp, type TestApp } from '../test/test-app.ts'
@@ -14,10 +16,12 @@ const ROOM_FIELDS = ['id', 'lat', 'lng', 'name', 'revision', 'createdAt']
 describe('rooms API', () => {
   const announced: Room[] = []
   const announcedUpdates: Room[] = []
+  const announcedDeletions: number[] = []
   const broadcaster: Broadcaster = {
     ...silentBroadcaster,
     roomCreated: (room) => announced.push(room),
     roomUpdated: (room) => announcedUpdates.push(room),
+    roomDeleted: (roomId) => announcedDeletions.push(roomId),
   }
   let testApp: TestApp
 
@@ -33,6 +37,7 @@ describe('rooms API', () => {
     await resetDatabase(testApp.db)
     announced.length = 0
     announcedUpdates.length = 0
+    announcedDeletions.length = 0
   })
 
   function createRoom(payload: unknown) {
@@ -51,6 +56,27 @@ describe('rooms API', () => {
       payload: payload as object,
       headers: authorization === undefined ? {} : { authorization },
     })
+  }
+
+  function deleteRoom(roomId: number, authorization?: string) {
+    return testApp.app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${roomId}`,
+      headers: authorization === undefined ? {} : { authorization },
+    })
+  }
+
+  function postMessage(roomId: number) {
+    return testApp.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${roomId}/messages`,
+      payload: { clientId: randomUUID(), authorName: 'Alice', body: 'Hello' },
+    })
+  }
+
+  async function messagesIn(roomId: number): Promise<Message[]> {
+    const response = await testApp.app.inject(`/api/rooms/${roomId}/messages`)
+    return response.json<{ messages: Message[] }>().messages
   }
 
   describe('POST /api/rooms', () => {
@@ -317,4 +343,131 @@ describe('rooms API', () => {
       expect(announcedUpdates).toEqual([])
     })
   })
+
+  describe('DELETE /api/rooms/:roomId', () => {
+    it('deletes an empty room for its creator, and announces it', async () => {
+      const { id, ownerToken } = await createdRoom()
+
+      const response = await deleteRoom(id, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(204)
+      expect(response.body).toBe('')
+      expect(announcedDeletions).toEqual([id])
+      expect((await testApp.app.inject(`/api/rooms/${id}`)).statusCode).toBe(404)
+      expect((await testApp.app.inject('/api/rooms')).json()).toEqual({ rooms: [] })
+    })
+
+    it('refuses to delete a room with a message, with 409 ROOM_NOT_EMPTY, and keeps both', async () => {
+      const { id, ownerToken } = await createdRoom()
+      await postMessage(id)
+
+      const response = await deleteRoom(id, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(409)
+      expect(response.json()).toMatchObject({ statusCode: 409, code: 'ROOM_NOT_EMPTY' })
+      expect(announcedDeletions).toEqual([])
+      expect((await testApp.app.inject(`/api/rooms/${id}`)).statusCode).toBe(200)
+      expect(await messagesIn(id)).toHaveLength(1)
+    })
+
+    // The insert holds a lock on its room, for the foreign key, until it commits. A delete that
+    // checked for messages without locking the room would miss the uncommitted message, delete
+    // the room once the lock went, and the foreign key's ON DELETE CASCADE would erase the message.
+    it('waits for a message being stored, then refuses to delete its room (I8)', async () => {
+      const { id, ownerToken } = await createdRoom()
+
+      await testApp.db.connection().execute(async (sender) => {
+        await sql`START TRANSACTION`.execute(sender)
+        try {
+          await sql`
+            INSERT INTO messages (room_id, client_id, author_name, body)
+            VALUES (${id}, ${randomUUID()}, 'Alice', 'Just in time')
+          `.execute(sender)
+          const deleting = deleteRoom(id, `Bearer ${ownerToken}`)
+          await expect.poll(() => waitingQueries(testApp.db)).toBeGreaterThan(0)
+
+          await sql`COMMIT`.execute(sender)
+
+          expect((await deleting).statusCode).toBe(409)
+        } finally {
+          await sql`ROLLBACK`.execute(sender)
+        }
+      })
+      expect(await messagesIn(id)).toHaveLength(1)
+      expect(announcedDeletions).toEqual([])
+    })
+
+    it('makes a message sent to a deleted room fail with 404', async () => {
+      const { id, ownerToken } = await createdRoom()
+      await deleteRoom(id, `Bearer ${ownerToken}`)
+
+      const response = await postMessage(id)
+
+      expect(response.statusCode).toBe(404)
+      expect(response.json()).toMatchObject({ code: 'ROOM_NOT_FOUND' })
+    })
+
+    it.each([
+      ['without a token', () => undefined],
+      ['with a malformed token', () => 'Bearer not-a-token'],
+    ])('refuses a delete %s with 403 NOT_ROOM_OWNER', async (_case, header) => {
+      const { id } = await createdRoom()
+
+      const response = await deleteRoom(id, header())
+
+      expect(response.statusCode).toBe(403)
+      expect(response.json()).toMatchObject({ code: 'NOT_ROOM_OWNER' })
+      expect((await testApp.app.inject(`/api/rooms/${id}`)).statusCode).toBe(200)
+      expect(announcedDeletions).toEqual([])
+    })
+
+    it("refuses a delete with another room's token", async () => {
+      const mine = await createdRoom()
+      const theirs = await createdRoom()
+
+      const response = await deleteRoom(mine.id, `Bearer ${theirs.ownerToken}`)
+
+      expect(response.statusCode).toBe(403)
+      expect((await testApp.app.inject(`/api/rooms/${mine.id}`)).statusCode).toBe(200)
+    })
+
+    it('refuses to delete a room created before rooms had owners', async () => {
+      await sql`INSERT INTO rooms (lat, lng) VALUES (1, 1)`.execute(testApp.db)
+      const { ownerToken } = await createdRoom()
+
+      expect((await deleteRoom(1, `Bearer ${ownerToken}`)).statusCode).toBe(403)
+    })
+
+    it('answers 404 ROOM_NOT_FOUND for a room that does not exist, or no longer does', async () => {
+      const { id, ownerToken } = await createdRoom()
+      await deleteRoom(id, `Bearer ${ownerToken}`)
+
+      const response = await deleteRoom(id, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(404)
+      expect(response.json()).toMatchObject({ code: 'ROOM_NOT_FOUND' })
+      expect(announcedDeletions).toEqual([id])
+    })
+
+    it('answers 400 VALIDATION_FAILED for a room id that is not a positive integer', async () => {
+      expect((await deleteRoom(Number.NaN)).statusCode).toBe(400)
+    })
+  })
 })
+
+/**
+ * The app's queries now waiting on the database, such as for a lock, on the test database. The
+ * test's account sees only its own connections, which is all this needs.
+ */
+async function waitingQueries(db: Kysely<Database>): Promise<number> {
+  const { rows } = await sql<{ db: string | null; Command: string; Info: string | null }>`
+    SHOW FULL PROCESSLIST
+  `.execute(db)
+  return rows.filter(
+    (row) =>
+      row.db === 'hello_world_test' &&
+      row.Command === 'Query' &&
+      row.Info !== null &&
+      !row.Info.startsWith('SHOW'),
+  ).length
+}

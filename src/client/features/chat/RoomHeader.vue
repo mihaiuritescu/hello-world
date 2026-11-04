@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { LIMITS, type Room } from '#shared/domain.ts'
 import { textProblem } from '#shared/text.ts'
-import { mdiPencilOutline } from '@mdi/js'
-import { computed, nextTick, ref, useTemplateRef } from 'vue'
+import { mdiDeleteOutline, mdiPencilOutline } from '@mdi/js'
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 import { ApiError, isRateLimited } from '../../lib/http.ts'
 import { defaultRoomTitle, roomTitle } from '../../lib/roomTitle.ts'
+import { useMessagesStore } from '../../stores/messages.ts'
 import { useRealtimeStore } from '../../stores/realtime.ts'
 import { useRoomsStore } from '../../stores/rooms.ts'
 import { useSessionStore } from '../../stores/session.ts'
@@ -14,10 +15,56 @@ const props = defineProps<{ room: Room }>()
 const rooms = useRoomsStore()
 const session = useSessionStore()
 const realtime = useRealtimeStore()
+const messages = useMessagesStore()
 
 const title = computed(() => roomTitle(props.room))
 /** Only the browser that created a room holds its owner token, and may change the room. */
 const isCreator = computed(() => session.ownsRoom(props.room.id))
+/**
+ * A room can go only while it has no messages, so the delete waits until they have loaded, and
+ * goes away with the first one. The server checks again, in case one is on its way.
+ */
+const canDelete = computed(
+  () =>
+    isCreator.value &&
+    messages.statusOf(props.room.id) === 'ready' &&
+    messages.listFor(props.room.id).length === 0,
+)
+
+const confirmingDelete = ref(false)
+const deleting = ref(false)
+const deleteError = ref<string | null>(null)
+const deleteTitleId = useId()
+
+// Each confirmation starts afresh: an earlier refusal may no longer hold.
+watch(confirmingDelete, (open) => {
+  if (open) deleteError.value = null
+})
+
+async function confirmDelete(): Promise<void> {
+  if (deleting.value) return
+  deleting.value = true
+  deleteError.value = null
+  try {
+    // Once the room is gone, the panel goes back to the start screen, and this dialog with it.
+    await rooms.deleteRoom(props.room.id)
+  } catch (error) {
+    deleteError.value = deleteFailure(error)
+  } finally {
+    deleting.value = false
+  }
+}
+
+function deleteFailure(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409) {
+    return 'Someone has just written in this room, so it can no longer be deleted.'
+  }
+  if (isRateLimited(error)) return "You're deleting rooms too fast. Wait a minute, then try again."
+  if (error instanceof ApiError && error.status === 403) {
+    return 'Only the browser that created this room can delete it.'
+  }
+  return "Couldn't delete the room. Please try again."
+}
 
 const renaming = ref(false)
 const draftName = ref('')
@@ -117,6 +164,38 @@ function clearRenameError(): void {
         aria-label="Rename this room"
         @click="startRenaming"
       />
+      <!-- Stays while open, even if a message arrives meanwhile: the refusal then says why. -->
+      <v-dialog
+        v-if="canDelete || confirmingDelete"
+        v-model="confirmingDelete"
+        max-width="400"
+        :aria-labelledby="deleteTitleId"
+      >
+        <template #activator="{ props: activatorProps }">
+          <v-btn
+            v-bind="activatorProps"
+            class="room-header__action"
+            :icon="mdiDeleteOutline"
+            variant="text"
+            size="small"
+            aria-label="Delete this room"
+          />
+        </template>
+        <v-card>
+          <v-card-title :id="deleteTitleId" tag="h2" class="room-header__dialog-title">
+            Delete {{ title }}?
+          </v-card-title>
+          <v-card-text>Its pin disappears for everyone, and this can't be undone.</v-card-text>
+          <v-card-text v-if="deleteError" role="alert" class="text-error">
+            {{ deleteError }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn @click="confirmingDelete = false">Cancel</v-btn>
+            <v-btn color="error" :loading="deleting" @click="confirmDelete">Delete</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </template>
     <ConnectionChip :status="realtime.status" class="room-header__connection" />
   </div>
@@ -167,5 +246,12 @@ function clearRenameError(): void {
 .room-header__connection {
   flex: none;
   margin-top: 12px;
+}
+
+/* The dialog is teleported out of this component, but scoped styles follow its slot content. */
+.room-header__dialog-title {
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>

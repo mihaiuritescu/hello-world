@@ -8,6 +8,7 @@ import type { Message, Room } from '#shared/domain.ts'
 export interface Broadcaster {
   roomCreated(room: Room): void
   roomUpdated(room: Room): void
+  roomDeleted(roomId: number): void
   messageCreated(message: Message): void
 }
 
@@ -15,5 +16,6 @@ export interface Broadcaster {
 export const silentBroadcaster: Broadcaster = {
   roomCreated: () => {},
   roomUpdated: () => {},
+  roomDeleted: () => {},
   messageCreated: () => {},
 }

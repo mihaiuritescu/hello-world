@@ -86,6 +86,17 @@ describe('session store', () => {
     expect(useSessionStore().ownerTokenFor(5)).toBe('token-5')
   })
 
+  it('forgets the owner token of a room it no longer needs, and keeps the others', () => {
+    const session = useSessionStore()
+    session.rememberOwnerToken(5, 'token-5')
+    session.rememberOwnerToken(6, 'token-6')
+
+    session.forgetOwnerToken(5)
+
+    expect(session.ownsRoom(5)).toBe(false)
+    expect(session.ownerTokenFor(6)).toBe('token-6')
+  })
+
   it('ignores a stored owner token that is not text', () => {
     localStorage.setItem('hello-world.ownerTokens', JSON.stringify({ 5: { not: 'a token' } }))
 

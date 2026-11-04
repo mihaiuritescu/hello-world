@@ -63,6 +63,15 @@ export function notRoomOwner(roomId: number): HttpError {
   )
 }
 
+/** The 409 for deleting a room that has messages: after its first message, a room stays. */
+export function roomNotEmpty(roomId: number): HttpError {
+  return new HttpError(
+    409,
+    'ROOM_NOT_EMPTY',
+    `Room ${roomId} has messages, so it can no longer be deleted.`,
+  )
+}
+
 /** The 429 for a client over a rate limit. `after` says when to try again, such as "1 minute". */
 export function tooManyRequests(after: string): HttpError {
   return new HttpError(429, 'RATE_LIMITED', `Too many requests. Try again in ${after}.`)

@@ -63,7 +63,7 @@ export interface RateLimits {
   /** API requests a minute. */
   apiPerMinute: number
   /**
-   * Room creations a minute, and renames a minute, each counted on its own; every connected
+   * Room creations, renames and deletions a minute, each counted on its own; every connected
    * client hears about each one.
    */
   roomsPerMinute: number

@@ -87,3 +87,48 @@ describe('App, opening a linked room', () => {
     expect(screen.getByRole('heading', { name: 'Chatroom 900' })).toBeInTheDocument()
   })
 })
+
+describe('App, when the open room is deleted', () => {
+  let fake: ReturnType<typeof createFakeSocket>
+
+  beforeEach(() => {
+    document.body.replaceChildren()
+    requestJsonMock.mockReset()
+    fake = createFakeSocket()
+    vi.mocked(connectSocket).mockReset().mockReturnValue(fake.socket)
+  })
+
+  it('goes back to the start screen and says which room was deleted', async () => {
+    const screen = await openApp('/?room=900', Promise.resolve(room(5)))
+    expect(screen.getByRole('heading', { name: 'Chatroom 900' })).toBeInTheDocument()
+
+    fake.receive('room:deleted', { id: 900 })
+    await flushPromises()
+
+    expect(await screen.findByText('Chatroom 900 was deleted.')).toBeInTheDocument()
+    expect(screen.getByText('Click on the map to start a chat')).toBeInTheDocument()
+    expect(useSessionStore().selectedRoomId).toBeNull()
+  })
+
+  it('names a renamed room by its name when it is deleted', async () => {
+    const screen = await openApp('/?room=900', Promise.resolve(room(5)))
+    // Each socket event arrives in a task of its own, so the app sees the new name first.
+    fake.receive('room:updated', room(900, { name: 'Picnic', revision: 1 }))
+    await flushPromises()
+
+    fake.receive('room:deleted', { id: 900 })
+    await flushPromises()
+
+    expect(await screen.findByText('Picnic was deleted.')).toBeInTheDocument()
+  })
+
+  it('says nothing when a room other than the open one is deleted', async () => {
+    const screen = await openApp('/?room=900', Promise.resolve(room(5)))
+
+    fake.receive('room:deleted', { id: 901 })
+    await flushPromises()
+
+    expect(screen.queryByText(/was deleted/)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Chatroom 900' })).toBeInTheDocument()
+  })
+})

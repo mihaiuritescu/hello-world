@@ -119,6 +119,127 @@ describe('rooms store', () => {
     expect(rooms.byId.get(3)?.name).toBeNull()
   })
 
+  it('takes a room out of the list for good when it is deleted', async () => {
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+
+    rooms.remove(3)
+    // Copies that left the server before the delete, still on their way.
+    rooms.upsert(room(3))
+    requestJsonMock.mockResolvedValue({ rooms: [room(3)] })
+    await rooms.load()
+
+    expect(rooms.byId.has(3)).toBe(false)
+    expect(rooms.isDeleted(3)).toBe(true)
+  })
+
+  it('drops the rooms a reload shows are gone, deleted while this client was not listening', async () => {
+    requestJsonMock.mockResolvedValueOnce({ rooms: [room(1), room(2), room(3)] })
+    const rooms = useRoomsStore()
+    await rooms.load()
+
+    requestJsonMock.mockResolvedValueOnce({ rooms: [room(1), room(3)] })
+    await rooms.load()
+
+    expect(rooms.list.map((r) => r.id)).toEqual([1, 3])
+    expect(rooms.isDeleted(2)).toBe(true)
+  })
+
+  it('keeps a room announced while a reload was on its way, which the reload predates', async () => {
+    requestJsonMock.mockResolvedValueOnce({ rooms: [room(1)] })
+    const rooms = useRoomsStore()
+    await rooms.load()
+    const reload = deferred<{ rooms: Room[] }>()
+    requestJsonMock.mockReturnValueOnce(reload.promise)
+
+    const reloading = rooms.load()
+    rooms.upsert(room(2))
+    reload.resolve({ rooms: [room(1)] })
+    await reloading
+
+    expect(rooms.list.map((r) => r.id)).toEqual([1, 2])
+  })
+
+  it('keeps an old room opened from a link, which a full list leaves out', async () => {
+    window.history.replaceState(null, '', '/?room=1')
+    const rooms = useRoomsStore()
+    rooms.upsert(room(1))
+    const newest = Array.from({ length: LIMITS.listedRooms }, (_, index) => room(index + 2))
+    requestJsonMock.mockResolvedValue({ rooms: newest })
+
+    await rooms.load()
+
+    expect(rooms.byId.has(1)).toBe(true)
+    expect(rooms.isDeleted(1)).toBe(false)
+  })
+
+  it('lets a reload that settles after a newer one drop nothing', async () => {
+    requestJsonMock.mockResolvedValueOnce({ rooms: [room(1), room(2)] })
+    const rooms = useRoomsStore()
+    await rooms.load()
+    const older = deferred<{ rooms: Room[] }>()
+    requestJsonMock
+      .mockReturnValueOnce(older.promise)
+      .mockResolvedValueOnce({ rooms: [room(1), room(2), room(3)] })
+
+    const olderLoad = rooms.load()
+    await rooms.load()
+    older.resolve({ rooms: [room(1)] })
+    await olderLoad
+
+    expect(rooms.list.map((r) => r.id)).toEqual([1, 2, 3])
+  })
+
+  it('deletes a room with its owner token, then forgets the room and the token', async () => {
+    const session = useSessionStore()
+    session.rememberOwnerToken(3, 'token-3')
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+    requestJsonMock.mockResolvedValue(null)
+
+    await rooms.deleteRoom(3)
+
+    expect(requestJsonMock).toHaveBeenCalledWith('/api/rooms/3', {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer token-3' },
+    })
+    expect(rooms.byId.has(3)).toBe(false)
+    expect(rooms.isDeleted(3)).toBe(true)
+    expect(session.ownsRoom(3)).toBe(false)
+  })
+
+  it('counts a room that is already gone as deleted', async () => {
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+    requestJsonMock.mockRejectedValue(new ApiError(404, 'ROOM_NOT_FOUND', 'Room not found'))
+
+    await rooms.deleteRoom(3)
+
+    expect(rooms.isDeleted(3)).toBe(true)
+  })
+
+  it('keeps a room, and its token, when the server refuses to delete it', async () => {
+    useSessionStore().rememberOwnerToken(3, 'token-3')
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+    requestJsonMock.mockRejectedValue(new ApiError(409, 'ROOM_NOT_EMPTY', 'It has messages'))
+
+    await expect(rooms.deleteRoom(3)).rejects.toMatchObject({ status: 409 })
+
+    expect(rooms.byId.has(3)).toBe(true)
+    expect(useSessionStore().ownsRoom(3)).toBe(true)
+  })
+
+  it('takes out a room that a rename finds gone', async () => {
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+    requestJsonMock.mockRejectedValue(new ApiError(404, 'ROOM_NOT_FOUND', 'Room not found'))
+
+    await expect(rooms.rename(3, 'Picnic')).rejects.toBeInstanceOf(ApiError)
+
+    expect(rooms.isDeleted(3)).toBe(true)
+  })
+
   it('creates a separate room for each click, even while an earlier create is in flight', async () => {
     requestJsonMock.mockResolvedValueOnce(created(1)).mockResolvedValueOnce(created(2))
     const rooms = useRoomsStore()

@@ -9,6 +9,11 @@ export interface Presence {
   online: number
 }
 
+/** A room its creator deleted. Room ids are never reused, so the id alone says which. */
+export interface RoomDeletion {
+  id: number
+}
+
 /**
  * Facts the server announces, named `<entity>:<past tense>`: each write after it commits (I1),
  * and the online count when it changes.
@@ -18,6 +23,8 @@ export interface ServerToClientEvents {
   'room:created': (room: Room) => void
   /** Sent to every client when a room's creator renames it. */
   'room:updated': (room: Room) => void
+  /** Sent to every client when a room's creator deletes it. */
+  'room:deleted': (deletion: RoomDeletion) => void
   /** Sent to the clients that have the message's room open. */
   'message:created': (message: Message) => void
   /** Sent to a client as it connects, then to every client, at most once a second. */

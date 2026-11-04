@@ -43,6 +43,14 @@ export const useSessionStore = defineStore('session', () => {
     ownerTokens.value = { ...storedTokens(), [roomId]: token }
   }
 
+  /** Drops a room's token once the room is gone, so tokens don't pile up on this device. */
+  function forgetOwnerToken(roomId: number): void {
+    const key = String(roomId)
+    ownerTokens.value = Object.fromEntries(
+      Object.entries(storedTokens()).filter(([id]) => id !== key),
+    )
+  }
+
   return {
     selectedRoomId,
     selectRoom,
@@ -50,6 +58,7 @@ export const useSessionStore = defineStore('session', () => {
     ownerTokenFor,
     ownsRoom,
     rememberOwnerToken,
+    forgetOwnerToken,
   }
 })
 

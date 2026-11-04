@@ -84,3 +84,51 @@ test.describe("a room's creator (FR-8)", () => {
     await expect(secondPage.getByRole('button', { name: 'Rename this room' })).toHaveCount(0)
   })
 })
+
+test.describe("a room's creator (FR-9)", () => {
+  test('deletes an empty room, and every window goes back to the start screen @smoke', async ({
+    page,
+    secondPage,
+  }) => {
+    await page.goto('/')
+    await createRoom(page)
+    await secondPage.goto('/?room=1')
+    await expect(secondPage.getByRole('status', { name: 'Connection' })).toHaveText('Live')
+
+    await page.getByRole('button', { name: 'Delete this room' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+
+    for (const window of [page, secondPage]) {
+      await expect(window.getByText('Chatroom 1 was deleted.')).toBeVisible({ timeout: 1_000 })
+      await expect(window.getByText('Click on the map to start a chat')).toBeVisible()
+      await expect(window.getByTitle('Chatroom 1')).toHaveCount(0)
+      await expect(window).not.toHaveURL(/room=/)
+    }
+  })
+
+  test("never gives a deleted room's number to a new one", async ({ page }) => {
+    await page.goto('/')
+    await createRoom(page)
+    await page.getByRole('button', { name: 'Delete this room' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(page.getByText('Click on the map to start a chat')).toBeVisible()
+
+    await page.locator('.leaflet-container').click({ position: WEST })
+
+    await expect(heading(page, 'Chatroom 2')).toBeVisible()
+  })
+
+  test('can no longer delete a room once it has a message', async ({ page }) => {
+    await page.goto('/')
+    await createRoom(page)
+    await expect(page.getByRole('button', { name: 'Delete this room' })).toBeVisible()
+
+    await page.getByRole('textbox', { name: 'User name' }).fill('Alice')
+    await page.getByRole('textbox', { name: 'Message' }).fill('First!')
+    await page.getByRole('button', { name: 'Submit' }).click()
+
+    await expect(page.getByRole('log', { name: 'Messages' }).getByText('First!')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Delete this room' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Rename this room' })).toBeVisible()
+  })
+})

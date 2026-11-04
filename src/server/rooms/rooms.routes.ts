@@ -1,7 +1,7 @@
 import { LIMITS, type CreatedRoom } from '#shared/domain.ts'
 import { CoordinatesSchema, RoomIdParamsSchema, RoomRenameSchema } from '#shared/schemas.ts'
 import type { FastifyInstance } from 'fastify'
-import { notRoomOwner, parseInput, roomNotFound } from '../errors.ts'
+import { notRoomOwner, parseInput, roomNotEmpty, roomNotFound } from '../errors.ts'
 import type { Broadcaster } from '../realtime/broadcaster.ts'
 import { issueOwnerToken, ownerTokenHash } from './rooms.ownership.ts'
 import type { RoomsRepository } from './rooms.repository.ts'
@@ -9,7 +9,7 @@ import type { RoomsRepository } from './rooms.repository.ts'
 interface RoomRoutesDeps {
   rooms: RoomsRepository
   broadcaster: Broadcaster
-  /** Room creations, and renames, one client may make a minute: each counted on its own. */
+  /** Room creations, renames and deletions one client may make a minute: each counted on its own. */
   writesPerMinute: number
 }
 
@@ -27,8 +27,8 @@ export function registerRoomRoutes(
     return room
   })
 
-  // Every new or renamed room reaches every connected client, so these writes have a lower
-  // limit. Each route counts its own requests against it.
+  // Every new, renamed or deleted room reaches every connected client, so these writes have a
+  // lower limit. Each route counts its own requests against it.
   const rateLimit = { max: writesPerMinute, timeWindow: '1 minute' }
 
   app.post('/api/rooms', { config: { rateLimit } }, async (request, reply) => {
@@ -51,5 +51,16 @@ export function registerRoomRoutes(
     // The rename's transaction has committed (I1).
     broadcaster.roomUpdated(result.room)
     return result.room
+  })
+
+  app.delete('/api/rooms/:roomId', { config: { rateLimit } }, async (request, reply) => {
+    const { roomId } = parseInput(RoomIdParamsSchema, request.params)
+    const result = await rooms.deleteIfEmpty(roomId, ownerTokenHash(request.headers.authorization))
+    if (result.outcome === 'room-not-found') throw roomNotFound(roomId)
+    if (result.outcome === 'not-owner') throw notRoomOwner(roomId)
+    if (result.outcome === 'has-messages') throw roomNotEmpty(roomId)
+    // The delete's transaction has committed (I1).
+    broadcaster.roomDeleted(roomId)
+    return reply.code(204).send()
   })
 }

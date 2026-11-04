@@ -130,6 +130,16 @@ describe('realtime store', () => {
     expect(useRoomsStore().byId.get(5)).toEqual(room(5, { name: 'Picnic', revision: 1 }))
   })
 
+  it('forgets a room the server announces as deleted', async () => {
+    await liveStore()
+    fake.receive('room:created', room(5))
+
+    fake.receive('room:deleted', { id: 5 })
+
+    expect(useRoomsStore().byId.has(5)).toBe(false)
+    expect(useRoomsStore().isDeleted(5)).toBe(true)
+  })
+
   it('reports whether updates arrive live', () => {
     const realtime = useRealtimeStore()
     realtime.connect()

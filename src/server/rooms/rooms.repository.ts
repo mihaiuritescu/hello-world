@@ -1,11 +1,15 @@
 import type { Room } from '#shared/domain.ts'
 import type { Coordinates } from '#shared/schemas.ts'
-import type { Kysely, Selectable } from 'kysely'
+import type { Kysely, Selectable, Transaction } from 'kysely'
 import { toSafeInteger, type Database, type RoomsTable } from '../db/database.ts'
 import { isOwnerHash } from './rooms.ownership.ts'
 
-export type RenameRoomResult =
-  { outcome: 'renamed'; room: Room } | { outcome: 'room-not-found' } | { outcome: 'not-owner' }
+/** Why a change to a room was refused: no such room, or a request without the owner's token. */
+type Refusal = { outcome: 'room-not-found' } | { outcome: 'not-owner' }
+
+export type RenameRoomResult = { outcome: 'renamed'; room: Room } | Refusal
+
+export type DeleteRoomResult = { outcome: 'deleted' } | { outcome: 'has-messages' } | Refusal
 
 export interface RoomsRepository {
   /** The newest `limit` rooms, oldest first. */
@@ -18,6 +22,11 @@ export interface RoomsRepository {
    * owner's. Every rename gets the next revision, even concurrent ones.
    */
   rename(id: number, name: string | null, ownerTokenHash: Buffer | null): Promise<RenameRoomResult>
+  /**
+   * Deletes a room when `ownerTokenHash` is its owner's and it has no messages, even while a
+   * message is on its way (I8).
+   */
+  deleteIfEmpty(id: number, ownerTokenHash: Buffer | null): Promise<DeleteRoomResult>
 }
 
 /** The columns the API shows. The owner token's hash never leaves the database layer. */
@@ -62,14 +71,8 @@ export function createRoomsRepository(db: Kysely<Database>): RoomsRepository {
     rename(id, name, ownerTokenHash) {
       return db.transaction().execute(async (trx): Promise<RenameRoomResult> => {
         // The row lock makes concurrent renames take turns, so each reads back its own revision.
-        const owner = await trx
-          .selectFrom('rooms')
-          .select('owner_token_hash')
-          .where('id', '=', id)
-          .forUpdate()
-          .executeTakeFirst()
-        if (!owner) return { outcome: 'room-not-found' }
-        if (!isOwnerHash(owner.owner_token_hash, ownerTokenHash)) return { outcome: 'not-owner' }
+        const refusal = await lockAsOwner(trx, id, ownerTokenHash)
+        if (refusal) return refusal
 
         await trx
           .updateTable('rooms')
@@ -84,7 +87,49 @@ export function createRoomsRepository(db: Kysely<Database>): RoomsRepository {
         return { outcome: 'renamed', room: toRoom(row) }
       })
     },
+
+    deleteIfEmpty(id, ownerTokenHash) {
+      return db.transaction().execute(async (trx): Promise<DeleteRoomResult> => {
+        const refusal = await lockAsOwner(trx, id, ownerTokenHash)
+        if (refusal) return refusal
+
+        // The foreign key's ON DELETE CASCADE would take a room's messages with it, so the room
+        // must be empty, even of a message being stored right now. Storing one locks its room for
+        // the foreign-key check, which waits for the lock this transaction holds. A message stored
+        // before shows in this locking read. One stored after finds no room, and gets a 404 (I8).
+        const message = await trx
+          .selectFrom('messages')
+          .select('id')
+          .where('room_id', '=', id)
+          .limit(1)
+          .forShare()
+          .executeTakeFirst()
+        if (message) return { outcome: 'has-messages' }
+
+        await trx.deleteFrom('rooms').where('id', '=', id).execute()
+        return { outcome: 'deleted' }
+      })
+    },
   }
+}
+
+/**
+ * Locks a room's row until the transaction ends, then checks that the request holds the room's
+ * owner token. Returns why the change can't go ahead, or null when it can.
+ */
+async function lockAsOwner(
+  trx: Transaction<Database>,
+  id: number,
+  ownerTokenHash: Buffer | null,
+): Promise<Refusal | null> {
+  const row = await trx
+    .selectFrom('rooms')
+    .select('owner_token_hash')
+    .where('id', '=', id)
+    .forUpdate()
+    .executeTakeFirst()
+  if (!row) return { outcome: 'room-not-found' }
+  return isOwnerHash(row.owner_token_hash, ownerTokenHash) ? null : { outcome: 'not-owner' }
 }
 
 function toRoom(row: RoomRow): Room {

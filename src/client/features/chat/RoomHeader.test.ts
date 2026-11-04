@@ -1,4 +1,4 @@
-import type { Room } from '#shared/domain.ts'
+import type { Message, Room } from '#shared/domain.ts'
 import { within } from '@testing-library/dom'
 import userEvent from '@testing-library/user-event'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { ApiError, requestJson } from '../../lib/http.ts'
 import { createAppVuetify } from '../../plugins/vuetify.ts'
+import { useMessagesStore } from '../../stores/messages.ts'
 import { useRoomsStore } from '../../stores/rooms.ts'
 import { useSessionStore } from '../../stores/session.ts'
 import RoomHeader from './RoomHeader.vue'
@@ -49,6 +50,26 @@ function renderHeader(open: Room, { created = false } = {}) {
 
 function patchCalls() {
   return requestJsonMock.mock.calls.filter(([, options]) => options?.method === 'PATCH')
+}
+
+function deleteCalls() {
+  return requestJsonMock.mock.calls.filter(([, options]) => options?.method === 'DELETE')
+}
+
+const message: Message = {
+  id: 1,
+  roomId: 7,
+  authorName: 'Alice',
+  body: 'First!',
+  createdAt: '2026-11-04T10:00:00.000Z',
+}
+
+/** Renders the header of a room this browser created, once the room's messages have loaded. */
+async function renderLoadedHeader(open: Room, messages: Message[]) {
+  const rendered = renderHeader(open, { created: true })
+  requestJsonMock.mockResolvedValueOnce({ messages })
+  await useMessagesStore().load(open.id)
+  return rendered
 }
 
 enableAutoUnmount(afterEach)
@@ -174,5 +195,83 @@ describe('RoomHeader', () => {
 
     expect(screen.getByText(text)).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Room name' })).toHaveValue('Picnic')
+  })
+
+  it('offers deleting an empty room to its creator, once its messages have loaded', async () => {
+    const { screen } = await renderLoadedHeader(room(7), [])
+
+    expect(screen.getByRole('button', { name: 'Delete this room' })).toBeVisible()
+  })
+
+  it('offers no delete while the messages are still loading: the room may have some', () => {
+    const { screen } = renderHeader(room(7), { created: true })
+
+    expect(screen.queryByRole('button', { name: 'Delete this room' })).not.toBeInTheDocument()
+  })
+
+  it('offers no delete to anyone but the creator', async () => {
+    const { screen } = renderHeader(room(7))
+    requestJsonMock.mockResolvedValueOnce({ messages: [] })
+    await useMessagesStore().load(7)
+
+    expect(screen.queryByRole('button', { name: 'Delete this room' })).not.toBeInTheDocument()
+  })
+
+  it('stops offering the delete as soon as a message arrives', async () => {
+    const { screen } = await renderLoadedHeader(room(7), [])
+
+    useMessagesStore().upsert(message)
+    await flushPromises()
+
+    expect(screen.queryByRole('button', { name: 'Delete this room' })).not.toBeInTheDocument()
+  })
+
+  it('offers no delete for a room that already has messages', async () => {
+    const { screen } = await renderLoadedHeader(room(7), [message])
+
+    expect(screen.queryByRole('button', { name: 'Delete this room' })).not.toBeInTheDocument()
+  })
+
+  it('deletes the room once the creator confirms', async () => {
+    const { screen, user } = await renderLoadedHeader(room(7), [])
+    requestJsonMock.mockResolvedValue(null)
+
+    await user.click(screen.getByRole('button', { name: 'Delete this room' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Delete Chatroom 7?')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await flushPromises()
+
+    expect(deleteCalls()).toEqual([
+      ['/api/rooms/7', { method: 'DELETE', headers: { authorization: 'Bearer token-7' } }],
+    ])
+    expect(useRoomsStore().isDeleted(7)).toBe(true)
+  })
+
+  it('keeps the room when the creator cancels', async () => {
+    const { screen, user } = await renderLoadedHeader(room(7), [])
+
+    await user.click(screen.getByRole('button', { name: 'Delete this room' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }),
+    )
+
+    expect(deleteCalls()).toEqual([])
+    expect(useRoomsStore().byId.has(7)).toBe(true)
+  })
+
+  it('says why a room that someone has just written in cannot be deleted', async () => {
+    const { screen, user } = await renderLoadedHeader(room(7), [])
+    requestJsonMock.mockRejectedValue(new ApiError(409, 'ROOM_NOT_EMPTY', 'It has messages.'))
+
+    await user.click(screen.getByRole('button', { name: 'Delete this room' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await flushPromises()
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'Someone has just written in this room, so it can no longer be deleted.',
+    )
+    expect(useRoomsStore().byId.has(7)).toBe(true)
   })
 })

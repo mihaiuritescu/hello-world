@@ -87,6 +87,20 @@ describe('real-time delivery', () => {
     expect(await heard).toEqual([response.json(), response.json()])
   })
 
+  it('tells every connected client about a deleted room', async () => {
+    const [first, second] = await Promise.all([connect(), connect()])
+    const { id, ownerToken } = (await createRoom()).json<CreatedRoom>()
+    const heard = Promise.all([nextEvent(first, 'room:deleted'), nextEvent(second, 'room:deleted')])
+
+    await testApp.app.inject({
+      method: 'DELETE',
+      url: `/api/rooms/${id}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    })
+
+    expect(await heard).toEqual([{ id }, { id }])
+  })
+
   it('sends a message to the clients that have its room open, and to no one else', async () => {
     const [inRoom1, inRoom2] = await Promise.all([connect(), connect()])
     await inRoom1.emitWithAck('room:subscribe', { roomId: 1 })

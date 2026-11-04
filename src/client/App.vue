@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { Coordinates } from '#shared/schemas.ts'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import ChatPanel from './features/chat/ChatPanel.vue'
 import AppHeader from './features/header/AppHeader.vue'
 import ChatMap from './features/map/ChatMap.vue'
 import { isRateLimited } from './lib/http.ts'
-import { defaultRoomTitle } from './lib/roomTitle.ts'
+import { defaultRoomTitle, roomTitle } from './lib/roomTitle.ts'
 import { useRealtimeStore } from './stores/realtime.ts'
 import { useRoomsStore } from './stores/rooms.ts'
 import { useSessionStore } from './stores/session.ts'
@@ -13,7 +13,12 @@ import { useSessionStore } from './stores/session.ts'
 const rooms = useRoomsStore()
 const session = useSessionStore()
 const realtime = useRealtimeStore()
-const errorMessage = ref<string | null>(null)
+/** The message the snackbar shows: an error, or news such as a deleted room. */
+const notice = ref<{ text: string; tone: 'error' | 'news' } | null>(null)
+
+function showError(text: string): void {
+  notice.value = { text, tone: 'error' }
+}
 
 /** The open room, once it has loaded. An unknown id in the URL leaves the panel empty. */
 const selectedRoom = computed(() =>
@@ -28,6 +33,14 @@ onMounted(async () => {
   if (session.selectedRoomId !== null) await openLinkedRoom(session.selectedRoomId)
 })
 
+// The open room can vanish: its creator deleted it, in this window or another. The panel goes
+// back to the start screen, and so does the URL, and the snackbar says why.
+watch(selectedRoom, (room, previous) => {
+  if (room !== null || previous === null || !rooms.isDeleted(previous.id)) return
+  notice.value = { text: `${roomTitle(previous)} was deleted.`, tone: 'news' }
+  if (session.selectedRoomId === previous.id) session.selectRoom(null)
+})
+
 /** Opens the room a link names: it may be older than the rooms the list holds, or not exist. */
 async function openLinkedRoom(roomId: number): Promise<void> {
   const title = defaultRoomTitle(roomId)
@@ -36,14 +49,16 @@ async function openLinkedRoom(roomId: number): Promise<void> {
   } catch (error) {
     // The user may have picked another room while this one was on its way.
     if (session.selectedRoomId !== roomId) return
-    errorMessage.value = isRateLimited(error)
-      ? `Too many requests from your network just now. Wait a minute, then reload the page to open ${title}.`
-      : `Couldn't open ${title}. Please reload the page.`
+    showError(
+      isRateLimited(error)
+        ? `Too many requests from your network just now. Wait a minute, then reload the page to open ${title}.`
+        : `Couldn't open ${title}. Please reload the page.`,
+    )
     return
   }
   // Unless the user has already picked another room, a link to no room leaves the start screen.
   if (!rooms.byId.has(roomId) && session.selectedRoomId === roomId) {
-    errorMessage.value = `${title} doesn't exist.`
+    showError(`${title} doesn't exist.`)
     session.selectRoom(null)
   }
 }
@@ -65,9 +80,11 @@ function createRoomAt(coordinates: Coordinates): void {
       if (choice === latestChoice) session.selectRoom(room.id)
     })
     .catch((error: unknown) => {
-      errorMessage.value = isRateLimited(error)
-        ? "You're creating chatrooms too fast. Wait a minute, then try again."
-        : "Couldn't create the chatroom. Please try again."
+      showError(
+        isRateLimited(error)
+          ? "You're creating chatrooms too fast. Wait a minute, then try again."
+          : "Couldn't create the chatroom. Please try again.",
+      )
     })
 }
 </script>
@@ -78,7 +95,8 @@ function createRoomAt(coordinates: Coordinates): void {
     <div class="app-shell">
       <AppHeader />
       <v-main class="app-main">
-        <!-- The panel is a sibling of the map, never inside it, so its clicks never reach Leaflet. -->
+        <!-- The panel is a sibling of the map, never inside it, so its clicks never reach
+             Leaflet. -->
         <div class="map-shell">
           <ChatMap
             :rooms="rooms.list"
@@ -88,12 +106,13 @@ function createRoomAt(coordinates: Coordinates): void {
           />
           <ChatPanel :room="selectedRoom" />
         </div>
+        <!-- News keeps Vuetify's dark snackbar: white on its info blue would be too faint. -->
         <v-snackbar
-          :model-value="errorMessage !== null"
-          color="error"
-          @update:model-value="errorMessage = null"
+          :model-value="notice !== null"
+          :color="notice?.tone === 'error' ? 'error' : undefined"
+          @update:model-value="notice = null"
         >
-          {{ errorMessage }}
+          {{ notice?.text }}
         </v-snackbar>
       </v-main>
     </div>
