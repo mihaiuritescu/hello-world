@@ -10,7 +10,7 @@ A real-time chat on a world map: click anywhere to drop a pin, open its chatroom
 
 - **Create a chatroom:** click anywhere on the map, or focus the map and press Enter to create one at its centre.
 - **Open a room:** click its pin, or focus the pin and press Enter. The open room's pin turns red, and the panel shows the room's latest 100 messages.
-- **Busy areas:** zoomed out, pins that would overlap merge into a circle that shows how many chatrooms it holds. Click it, or focus it and press Enter, to zoom in until its pins separate. The open room's pin always stays a pin.
+- **Busy areas:** zoomed out, pins that would overlap merge into a circle that shows how many chatrooms it holds. Click it, or focus it and press Enter, to zoom in on its rooms, clear of the chat panel. Rooms still close together stay grouped until you zoom in further. The open room's pin always stays a pin.
 - **Rename your room:** the browser that created a room sees a pencil next to its title. A name has up to 40 characters, and saving an empty one brings back "Chatroom N". A renamed room keeps its number, under the name and on its pin, so no name can pass for another room.
 - **Delete your room:** while a room you created has no messages, a bin next to its title deletes it, after you confirm. Its pin disappears for everyone, and any window that has it open goes back to the start screen and says so. After the first message, the room stays.
 - **Post a message:** write your name and a message, then press Submit or Enter. The message field clears for the next one, and your name is remembered on this device.

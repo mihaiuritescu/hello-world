@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Coordinates } from '#shared/schemas.ts'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, useTemplateRef, watch, type ComponentPublicInstance } from 'vue'
 import ChatPanel from './features/chat/ChatPanel.vue'
 import AppHeader from './features/header/AppHeader.vue'
 import ChatMap from './features/map/ChatMap.vue'
@@ -19,6 +19,10 @@ const notice = ref<{ text: string; tone: 'error' | 'news' } | null>(null)
 function showError(text: string): void {
   notice.value = { text, tone: 'error' }
 }
+
+const panel = useTemplateRef<ComponentPublicInstance>('panel')
+/** The chat panel's element, which floats over the map's top right. */
+const panelElement = computed(() => (panel.value?.$el as HTMLElement | undefined) ?? null)
 
 /** The open room, once it has loaded. An unknown id in the URL leaves the panel empty. */
 const selectedRoom = computed(() =>
@@ -101,10 +105,11 @@ function createRoomAt(coordinates: Coordinates): void {
           <ChatMap
             :rooms="rooms.list"
             :selected-room-id="session.selectedRoomId"
+            :cover="panelElement"
             @create-at="createRoomAt"
             @select="openRoom"
           />
-          <ChatPanel :room="selectedRoom" />
+          <ChatPanel ref="panel" :room="selectedRoom" />
         </div>
         <!-- News keeps Vuetify's dark snackbar: white on its info blue would be too faint. -->
         <v-snackbar

@@ -11,17 +11,21 @@ const ACTIVE_CLASS = 'room-pin--active'
 const CLUSTER_RADIUS_PX = 40
 /** The margin left around a circle's rooms once the map has zoomed in on them, in pixels. */
 const ZOOM_PADDING_PX = 64
+/** The least room, in pixels, that keeping clear of the panel may leave for a circle's rooms. */
+const MIN_FREE_PX = 120
 
 /**
  * Keeps the listed rooms on the map: a pin for a room on its own, and a counted circle for rooms
  * whose pins would overlap at the current zoom. The open room's pin is highlighted and never
  * merges. Nothing merges at the deepest zoom, where zooming in could no longer separate pins.
+ * `cover` is what floats over the map, the chat panel: zooming in keeps rooms out from under it.
  */
 export function useRoomMarkers(
   map: Readonly<ShallowRef<L.Map | null>>,
   rooms: Readonly<Ref<readonly Room[]>>,
   selectedRoomId: Readonly<Ref<number | null>>,
   onSelect: (roomId: number) => void,
+  cover: Readonly<Ref<HTMLElement | null | undefined>>,
 ) {
   // Plain, non-reactive state: Leaflet objects must stay out of Vue's reactivity.
   /** One pin per listed room, made the first time the room is drawn on its own, then reused. */
@@ -30,12 +34,14 @@ export function useRoomMarkers(
   const circles = new Map<string, L.Marker>()
   let activeId: number | null = null
   let zoomWatched: L.Map | null = null
+  /** The room whose marker takes the keyboard focus once a zoom into its circle settles. */
+  let focusAfterZoom: number | null = null
 
   function sync(): void {
     const instance = map.value
     if (!instance) return
     if (zoomWatched !== instance) {
-      instance.on('zoomend', sync)
+      instance.on('zoomend', onZoomEnd)
       zoomWatched = instance
     }
 
@@ -67,6 +73,26 @@ export function useRoomMarkers(
       circles.delete(key)
     }
     highlight(selectedRoomId.value)
+  }
+
+  // A circle zoomed into with Enter is gone, or smaller, once the zoom settles. The focus moves on
+  // to its first room's marker, so the next Enter opens a room or zooms on: on the map itself, it
+  // would create a room (FR-2).
+  function onZoomEnd(): void {
+    sync()
+    if (focusAfterZoom === null) return
+    markerOf(focusAfterZoom)?.getElement()?.focus()
+    focusAfterZoom = null
+  }
+
+  /** The marker that shows a room now: its pin, or the circle it's in. */
+  function markerOf(roomId: number): L.Marker | undefined {
+    const pin = pins.get(roomId)
+    if (pin && map.value?.hasLayer(pin)) return pin
+    for (const [key, circle] of circles) {
+      if (key.split(',').includes(String(roomId))) return circle
+    }
+    return undefined
   }
 
   function groupsAt(instance: L.Map): RoomGroup[] {
@@ -137,19 +163,60 @@ export function useRoomMarkers(
       })
       .on('keydown', (event: L.LeafletKeyboardEvent) => {
         if (event.originalEvent.key !== 'Enter') return
+        focusAfterZoom = group.rooms[0]?.id ?? null
         zoomTo(instance, group.rooms)
-        // The circle goes once its pins separate, and its focus would go with it.
-        instance.getContainer().focus()
       })
       .addTo(instance)
     circles.set(key, circle)
     return key
   }
 
-  // Rooms that share one spot fit at any zoom, so this zooms all the way in, where nothing merges.
+  /**
+   * Zooms in on a circle's rooms: at least one level, so every click gets closer, and as far as
+   * fits them all in the part of the map the panel leaves free. Rooms that still overlap there
+   * stay in a smaller circle. Rooms that share one spot fit at any zoom, so they get the deepest,
+   * where nothing merges.
+   */
   function zoomTo(instance: L.Map, groupRooms: readonly Room[]): void {
     const bounds = L.latLngBounds(groupRooms.map((room) => L.latLng(room.lat, room.lng)))
-    instance.fitBounds(bounds, { padding: [ZOOM_PADDING_PX, ZOOM_PADDING_PX] })
+    const { topLeft, bottomRight } = freeAreaPadding(instance)
+    const fitting = instance.getBoundsZoom(bounds, false, topLeft.add(bottomRight))
+    const zoom = Math.min(
+      instance.getMaxZoom(),
+      Math.max(instance.getZoom() + 1, Number.isFinite(fitting) ? fitting : 0),
+    )
+    // Centred in the free area, as Leaflet's own fitBounds centres between its paddings.
+    const middle = instance
+      .project(bounds.getSouthWest(), zoom)
+      .add(instance.project(bounds.getNorthEast(), zoom))
+      .divideBy(2)
+      .add(bottomRight.subtract(topLeft).divideBy(2))
+    instance.setView(instance.unproject(middle, zoom), zoom)
+  }
+
+  /**
+   * The paddings that keep zoomed-in rooms away from the map's edges and from under the panel:
+   * left of it when it sits on the right, as on a wide screen, and below it when it spans the
+   * map's width, as on a phone. The panel is ignored when avoiding it would leave too little room.
+   */
+  function freeAreaPadding(instance: L.Map): { topLeft: L.Point; bottomRight: L.Point } {
+    const margin = L.point(ZOOM_PADDING_PX, ZOOM_PADDING_PX)
+    const padding = { topLeft: margin, bottomRight: margin }
+    const panel = cover.value?.getBoundingClientRect()
+    if (!panel) return padding
+    const area = instance.getContainer().getBoundingClientRect()
+    if (panel.left > area.left + area.width / 2) {
+      const right = area.right - panel.left + ZOOM_PADDING_PX
+      if (area.width - right - ZOOM_PADDING_PX >= MIN_FREE_PX) {
+        padding.bottomRight = L.point(right, ZOOM_PADDING_PX)
+      }
+    } else {
+      const top = panel.bottom - area.top + ZOOM_PADDING_PX
+      if (area.height - top - ZOOM_PADDING_PX >= MIN_FREE_PX) {
+        padding.topLeft = L.point(ZOOM_PADDING_PX, top)
+      }
+    }
+    return padding
   }
 
   function highlight(roomId: number | null): void {

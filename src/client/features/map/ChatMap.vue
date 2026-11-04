@@ -8,6 +8,8 @@ import { useRoomMarkers } from './useRoomMarkers.ts'
 const props = defineProps<{
   rooms: readonly Room[]
   selectedRoomId: number | null
+  /** What floats over the map, the chat panel: zooming in on a circle keeps its rooms clear of it. */
+  cover?: HTMLElement | null
 }>()
 
 const emit = defineEmits<{
@@ -17,8 +19,12 @@ const emit = defineEmits<{
 
 const container = useTemplateRef<HTMLDivElement>('container')
 const { map, zoom } = useLeafletMap(container, (coordinates) => emit('createAt', coordinates))
-useRoomMarkers(map, toRef(props, 'rooms'), toRef(props, 'selectedRoomId'), (roomId) =>
-  emit('select', roomId),
+useRoomMarkers(
+  map,
+  toRef(props, 'rooms'),
+  toRef(props, 'selectedRoomId'),
+  (roomId) => emit('select', roomId),
+  toRef(props, 'cover'),
 )
 </script>
 
