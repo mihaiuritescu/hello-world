@@ -4,7 +4,7 @@ A real-time chat on a world map: click anywhere to drop a pin, open its chatroom
 
 **Live demo:** <https://3-125-55-249.nip.io>. Open it in two windows to watch pins and messages arrive live.
 
-> **Status:** rooms, messages and live updates work, everything persists, and each client has rate limits. The demo runs on AWS; the self-review comes next. See the [PRD](docs/PRD.md) for the plan.
+> **Status:** complete for the test. FR-1 to FR-10 work, everything persists and updates live, and the demo runs on AWS. The self-review found no blocker; its [triage note](docs/review/triage.md) says what was fixed, what wasn't, and why. See the [PRD](docs/PRD.md) for the requirements.
 
 ## Using it
 
@@ -137,6 +137,7 @@ The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behin
 - **One server instance.** The way to scale out, with a load balancer and a shared Socket.IO adapter, is in [Infrastructure and costs](docs/INFRASTRUCTURE.md).
 - **Partial history:** a room opens on its latest 100 messages, with no paging back, and the map shows the 1,000 newest rooms.
 - **Best-effort map tiles:** OpenStreetMap's public tiles have no service-level guarantee.
+- **Very wide windows:** on a window wider than 2,048 px, the most zoomed-out view repeats part of the world at its edges. Pins show only on the inner copy, and a click on an outer copy puts its pin on the inner one. Zooming in sets it right.
 
 ## Licence
 

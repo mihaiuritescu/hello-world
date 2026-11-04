@@ -58,3 +58,6 @@ This project was built with Claude Code in the Claude desktop app, using Claude 
 | S3 | A forced reconnect skipped the backoff: a retry storm under load | Replaced by a reload when a subscription's answer comes late |
 | S3 | Socket handshakes bypass the HTTP rate limits | Connection and subscription caps (S4) |
 | S5 | 18 findings over three rounds: runbook safety, rollbacks, first boot, the deploy's trust chain | 16 fixed; 1 refuted with a test (a carriage return in Git Bash captures); 1 kept and documented (AWS's managed SSM policy) |
+| S5 | Tag deploys: 10 findings from two lenses. Later, the fix for GitHub's new token subject used wildcards, and a review caught that IAM's `*` let them match other repositories | All fixed or justified. The trust spells out the repository's names and IDs, and a test refuses a wildcard before the tag |
+| S7 | 12 findings on the extras (1 S2, 11 S3), among them a circle click that could leave rooms merged or under the panel | Every confirmed one fixed, each with a regression test |
+| S6 | Three rounds, 30 findings: 22 confirmed, 5 refuted. Two of the map fixes brought regressions, which the next round caught | 16 fixed, 7 deferred and 2 S4s left as they are, each with its reason in the [triage note](review/triage.md) |

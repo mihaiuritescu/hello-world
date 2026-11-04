@@ -26,6 +26,7 @@ How this project reviews its own code, and where the results live.
 
 | File | Content |
 |---|---|
-| `report.md` | The review of the release candidate, committed exactly as generated |
-| `triage.md` | The human decision on each finding: fixed, won't fix or deferred, with the reason |
-| `report-delta.md` | The review of the fix commits |
+| [`report.md`](report.md) | The review of the release candidate, committed exactly as generated |
+| [`report-delta.md`](report-delta.md) | The review of the fix commits |
+| [`report-delta-2.md`](report-delta-2.md) | The review of the fixes for the delta review |
+| [`triage.md`](triage.md) | The human decision on each finding of all three: fixed, won't fix or deferred, with the reason |
