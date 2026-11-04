@@ -160,8 +160,8 @@ export const useRoomsStore = defineStore('rooms', () => {
   }
 
   /**
-   * Renames a room this browser created; null brings back its default name. Throws if refused. A
-   * 404 means the room is gone, so it leaves the list too.
+   * Renames a room this browser created; null brings back its default name. Throws if refused.
+   * When the server says the room is gone, it leaves the list too.
    */
   async function rename(roomId: number, name: string | null): Promise<void> {
     try {
@@ -173,14 +173,15 @@ export const useRoomsStore = defineStore('rooms', () => {
         }),
       )
     } catch (error) {
-      if (isNotFound(error)) remove(roomId)
+      if (isRoomGone(error)) remove(roomId)
       throw error
     }
   }
 
   /**
    * Deletes a room this browser created. The server refuses once the room has a message (409), so
-   * that error is passed on. A 404 is what the user asked for: deleted already, by another window.
+   * that error is passed on. A room that is gone already, deleted from another window, is what the
+   * user asked for.
    */
   async function deleteRoom(roomId: number): Promise<void> {
     try {
@@ -189,7 +190,7 @@ export const useRoomsStore = defineStore('rooms', () => {
         headers: ownerHeaders(roomId),
       })
     } catch (error) {
-      if (!isNotFound(error)) throw error
+      if (!isRoomGone(error)) throw error
     }
     remove(roomId)
     session.forgetOwnerToken(roomId)
@@ -217,6 +218,10 @@ export const useRoomsStore = defineStore('rooms', () => {
   }
 })
 
-function isNotFound(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404
+/**
+ * Whether the server said the room no longer exists. Any other 404, such as a route an older
+ * server lacks after a rollback, says nothing about the room, and must not cost its owner token.
+ */
+function isRoomGone(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404 && error.code === 'ROOM_NOT_FOUND'
 }

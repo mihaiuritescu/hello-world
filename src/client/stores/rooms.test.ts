@@ -240,6 +240,30 @@ describe('rooms store', () => {
     expect(useSessionStore().ownsRoom(3)).toBe(true)
   })
 
+  // An older server, after a rollback, has no such routes: it answers NOT_FOUND for the route,
+  // not ROOM_NOT_FOUND. The room still exists, and its token is the only proof of who owns it.
+  it('keeps a room and its token when a delete answers 404 for something other than the room', async () => {
+    useSessionStore().rememberOwnerToken(3, 'token-3')
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+    requestJsonMock.mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'Route not found'))
+
+    await expect(rooms.deleteRoom(3)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    expect(rooms.byId.has(3)).toBe(true)
+    expect(useSessionStore().ownsRoom(3)).toBe(true)
+  })
+
+  it('keeps a room when a rename answers 404 for something other than the room', async () => {
+    const rooms = useRoomsStore()
+    rooms.upsert(room(3))
+    requestJsonMock.mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'Route not found'))
+
+    await expect(rooms.rename(3, 'Picnic')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    expect(rooms.byId.has(3)).toBe(true)
+  })
+
   it('takes out a room that a rename finds gone', async () => {
     const rooms = useRoomsStore()
     rooms.upsert(room(3))
