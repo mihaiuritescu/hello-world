@@ -290,11 +290,12 @@ A stack created from this template already has both, so for one of those, start 
 
 ### Release
 
-Tag a commit on `main`, then push the tag:
+Pick the next version: `v`, a digit and the rest of the number, such as `v1.1.1` after `v1.1.0`. CI deploys only tags that start with `v` and a digit. Then tag a commit on `main` and push the tag:
 
 ```bash
-git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin vX.Y.Z
+export VERSION=v1.2.3                   # the next version
+git tag -a "$VERSION" -m "$VERSION"
+git push origin "$VERSION"
 ```
 
 Only a person pushes tags, because a tag deploys with no approval step. Claude Code's git guard blocks the tag pushes it recognises: a net for mistakes, not a lock against an agent set on deploying.
