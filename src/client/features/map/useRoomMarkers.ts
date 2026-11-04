@@ -4,11 +4,14 @@ import { onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
 import { roomLabel } from '../../lib/roomTitle.ts'
 import { clusterIcon } from './clusterIcon.ts'
 import { clusterRooms, type RoomGroup } from './clusterRooms.ts'
+import { fanOut } from './fanOut.ts'
 import { pinIcon } from './pinIcon.ts'
 
 const ACTIVE_CLASS = 'room-pin--active'
 /** Pins closer than this on screen, in pixels, merge into one counted circle. */
 const CLUSTER_RADIUS_PX = 40
+/** Pins drawn on their own closer than this, in pixels, would sit on one another: they fan out. */
+const SAME_SPOT_PX = 24
 /** The margin left around a circle's rooms once the map has zoomed in on them, in pixels. */
 const ZOOM_PADDING_PX = 64
 /** The least room, in pixels, that keeping clear of the panel may leave for a circle's rooms. */
@@ -18,6 +21,8 @@ const MIN_FREE_PX = 120
  * Keeps the listed rooms on the map: a pin for a room on its own, and a counted circle for rooms
  * whose pins would overlap at the current zoom. The open room's pin is highlighted and never
  * merges. Nothing merges at the deepest zoom, where zooming in could no longer separate pins.
+ * Pins that would still sit on one another, there or next to the open room's, fan out side by
+ * side, so each one can be clicked; the rooms' coordinates stay as they are.
  * `cover` is what floats over the map, the chat panel: zooming in keeps rooms out from under it.
  */
 export function useRoomMarkers(
@@ -55,10 +60,15 @@ export function useRoomMarkers(
 
     const drawnPins = new Set<number>()
     const drawnCircles = new Set<string>()
-    for (const group of groupsAt(instance)) {
+    const groups = groupsAt(instance)
+    const fanned = fannedPositions(
+      instance,
+      groups.flatMap((group) => (group.rooms.length === 1 ? group.rooms : [])),
+    )
+    for (const group of groups) {
       const [first, second] = group.rooms
       if (first && !second) {
-        drawPin(instance, first)
+        drawPin(instance, first, fanned.get(first.id))
         drawnPins.add(first.id)
       } else {
         drawnCircles.add(drawCircle(instance, group))
@@ -106,12 +116,38 @@ export function useRoomMarkers(
     )
   }
 
-  function drawPin(instance: L.Map, room: Room): void {
+  /**
+   * Where to draw the pins, of `alone`, that would sit on one another: fanned out around their
+   * spot. A pin missing from the result goes at its room's own coordinates.
+   */
+  function fannedPositions(instance: L.Map, alone: readonly Room[]): Map<number, L.LatLng> {
+    const zoom = instance.getZoom()
+    const positions = new Map<number, L.LatLng>()
+    const spots = clusterRooms(
+      alone,
+      (room) => instance.project([room.lat, room.lng], zoom),
+      SAME_SPOT_PX,
+    )
+    for (const spot of spots) {
+      if (spot.rooms.length < 2) continue
+      const offsets = fanOut(spot.rooms.length)
+      spot.rooms.forEach((room, index) => {
+        const { x, y } = offsets[index] ?? { x: 0, y: 0 }
+        const point = L.point(spot.center.x + x, spot.center.y + y)
+        positions.set(room.id, instance.unproject(point, zoom))
+      })
+    }
+    return positions
+  }
+
+  function drawPin(instance: L.Map, room: Room, at = L.latLng(room.lat, room.lng)): void {
     let pin = pins.get(room.id)
     if (pin) {
       setTitle(pin, roomLabel(room))
+      // A pin fanned out at one zoom goes back to its room's own place at the next.
+      if (!pin.getLatLng().equals(at)) pin.setLatLng(at)
     } else {
-      pin = createPin(room)
+      pin = createPin(room, at)
       pins.set(room.id, pin)
     }
     if (!instance.hasLayer(pin)) pin.addTo(instance)
@@ -133,10 +169,10 @@ export function useRoomMarkers(
     }
   }
 
-  function createPin(room: Room): L.Marker {
+  function createPin(room: Room, at: L.LatLng): L.Marker {
     // Pins are where rooms are picked, so a renamed room keeps its number in the name they read.
     const title = roomLabel(room)
-    return L.marker([room.lat, room.lng], { icon: pinIcon, title, alt: title, keyboard: true })
+    return L.marker(at, { icon: pinIcon, title, alt: title, keyboard: true })
       .on('click', () => onSelect(room.id))
       .on('keydown', (event: L.LeafletKeyboardEvent) => {
         // keyboard: true makes the pin focusable; Leaflet leaves Enter to us.
@@ -175,7 +211,7 @@ export function useRoomMarkers(
    * Zooms in on a circle's rooms: at least one level, so every click gets closer, and as far as
    * fits them all in the part of the map the panel leaves free. Rooms that still overlap there
    * stay in a smaller circle. Rooms that share one spot fit at any zoom, so they get the deepest,
-   * where nothing merges.
+   * where nothing merges and their pins fan out.
    */
   function zoomTo(instance: L.Map, groupRooms: readonly Room[]): void {
     const bounds = L.latLngBounds(groupRooms.map((room) => L.latLng(room.lat, room.lng)))

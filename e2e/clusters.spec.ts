@@ -197,7 +197,9 @@ test.describe('pin clusters (FR-7)', () => {
     await expect(zoomLevel(page)).not.toHaveAttribute('data-zoom', '5')
   })
 
-  test('rooms at the very same spot come apart at the deepest zoom', async ({ page }) => {
+  test('rooms at the very same spot come apart at the deepest zoom, and each one opens', async ({
+    page,
+  }) => {
     const spot = CLUJ[0] ?? { lat: 0, lng: 0 }
     await seedRoomsAt([spot, spot])
     await page.goto('/')
@@ -205,8 +207,23 @@ test.describe('pin clusters (FR-7)', () => {
     await page.getByRole('button', { name: '2 chatrooms' }).click()
 
     await expect(zoomLevel(page)).toHaveAttribute('data-zoom', '19')
-    await expect(pin(page, 1)).toBeVisible()
-    await expect(pin(page, 2)).toBeVisible()
+    expect(await overlap(pin(page, 1), pin(page, 2))).toBe(false)
+    await pin(page, 1).click()
+    await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+    await pin(page, 2).click()
+    await expect(page.getByRole('heading', { name: 'Chatroom 2' })).toBeVisible()
+  })
+
+  test("a room at the open room's spot keeps a pin of its own that opens it", async ({ page }) => {
+    const spot = CLUJ[0] ?? { lat: 0, lng: 0 }
+    await seedRoomsAt([spot, spot])
+
+    await page.goto('/?room=1')
+
+    await expect(pin(page, 1)).toHaveClass(/room-pin--active/)
+    expect(await overlap(pin(page, 1), pin(page, 2))).toBe(false)
+    await pin(page, 2).click()
+    await expect(page.getByRole('heading', { name: 'Chatroom 2' })).toBeVisible()
   })
 
   test("the open room's pin stays out of circles", async ({ page }) => {
