@@ -87,7 +87,7 @@ The demo needs no domain. Its address, `3-125-55-249.nip.io`, is a name that nip
 ## Deploying
 
 - **Build:** CI tests every push. On `main` and on version tags, its `publish` job builds the arm64 image, pushes it to GHCR, and prints the digest.
-- **Deploy:** pushing a version tag, such as `v1.0.0`, deploys it. CI's deploy job signs in to AWS with GitHub's OpenID Connect token, so no AWS key is stored anywhere, and runs the stack's deploy document on the instance. By hand, one `aws ssm send-command` does the same.
+- **Deploy:** pushing a version tag, `vX.Y.Z`, deploys it. CI's deploy job signs in to AWS with GitHub's OpenID Connect token, so no AWS key is stored anywhere, and runs the stack's deploy document on the instance. By hand, one `aws ssm send-command` does the same.
   - The document pulls the image and takes the host files ([`deploy/aws/`](../deploy/aws)) out of it, so they always match the app.
   - It writes the settings from Secrets Manager into a file only root can read, runs the migrations and restarts the containers.
   - A deploy interrupts the app for a few seconds; Caddy holds the requests meanwhile, and clients reconnect by themselves.

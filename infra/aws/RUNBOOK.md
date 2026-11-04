@@ -254,7 +254,7 @@ Once this is set up, pushing a version tag deploys it, with no AWS session on yo
 3. It runs step 7 with the new digest.
 4. A last job runs step 8.
 
-AWS checks the token itself: the role trusts only jobs that run for a tag named `v` and a digit, such as `v1.0.0`, of the repository that the stack's `GitHubOidcRepository` names. That parameter holds the owner and repository IDs as well as their names, and GitHub never reuses an ID. The role may only:
+AWS checks the token itself: the role trusts only jobs that run for a tag named `v` and a digit, such as `v1.2.3`, of the repository that the stack's `GitHubOidcRepository` names. That parameter holds the owner and repository IDs as well as their names, and GitHub never reuses an ID. The role may only:
 - read the stack's outputs;
 - send the deploy document to the instance, which deploys any image of this repository's package;
 - read the status and output of commands, given their IDs.
@@ -293,8 +293,8 @@ A stack created from this template already has both, so for one of those, start 
 Tag a commit on `main`, then push the tag:
 
 ```bash
-git tag -a v1.0.0 -m "v1.0.0"
-git push origin v1.0.0
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
 Only a person pushes tags, because a tag deploys with no approval step. Claude Code's git guard blocks the tag pushes it recognises: a net for mistakes, not a lock against an agent set on deploying.
