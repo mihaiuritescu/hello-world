@@ -120,7 +120,7 @@ Expect your 12-digit account ID. Once the stack exists (after step 6), also load
 stack_outputs
 ```
 
-Expect `https://<a-b-c-d>.sslip.io i-… hello-world-demo-deploy`.
+Expect `https://<a-b-c-d>.nip.io i-… hello-world-demo-deploy`.
 
 The first time, also note in the console:
 - the account plan (Free or Paid), the date the account was created and, on a Free plan, its end date;
@@ -186,7 +186,7 @@ aws cloudformation wait stack-create-complete --stack-name "$STACK"
 stack_outputs
 ```
 
-Expect `https://<a-b-c-d>.sslip.io i-… hello-world-demo-deploy`. If the wait fails, this shows why:
+Expect `https://<a-b-c-d>.nip.io i-… hello-world-demo-deploy`. If the wait fails, this shows why:
 
 ```bash
 aws cloudformation describe-stack-events --stack-name "$STACK" \
@@ -213,7 +213,7 @@ COMMAND_ID=$(aws ssm send-command --document-name "$DOCUMENT" --document-version
 wait_for_command
 ```
 
-Expect the output to end with `Deployed ghcr.io/…@sha256:… to https://<a-b-c-d>.sslip.io`. The first deploy takes a few minutes, because it waits for the first boot to finish and then pulls the images. The document accepts only images of this repository's GHCR package; for any other, `send-command` fails.
+Expect the output to end with `Deployed ghcr.io/…@sha256:… to https://<a-b-c-d>.nip.io`. The first deploy takes a few minutes, because it waits for the first boot to finish and then pulls the images. The document accepts only images of this repository's GHCR package; for any other, `send-command` fails.
 
 ## 8. Smoke test (no AWS access needed)
 
@@ -260,6 +260,8 @@ aws cloudformation describe-change-set --stack-name "$STACK" --change-set-name u
 
 Every parameter keeps the value the stack has. To change one, give it `ParameterValue=…` instead of `UsePreviousValue=true`.
 
+`DeployDocument` shows `Conditional` whenever its content changes, as it does when the site address changes: through a new `SiteAddress`, or through a new default in the template while `SiteAddress` is empty. This `Conditional` is safe: the template sets `UpdateMethod: NewVersion`, so the document gets a new version in place. The instance keeps the old settings until the next deploy, so after the update, run `stack_outputs`, then step 7 with the `IMAGE_DIGEST` and `GIT_SHA` of the version that runs now (step 2 shows where to find them). For a new address, such as a domain that already points at the Elastic IP, Caddy then gets its certificate.
+
 Stop if `Instance`, `Database` or `ElasticIp` shows `True` or `Conditional` under Replacement: a new instance starts without the app until the next deploy, and a new database starts empty. Stop too if the wait fails because nothing changed. Either way, delete the change set:
 
 ```bash
@@ -298,7 +300,8 @@ For a shell on the host, `aws ssm start-session --target "$INSTANCE_ID"` needs t
     --query Command.CommandId --output text)
   wait_for_command
   ```
-- **HTTPS doesn't come up:** Let's Encrypt must reach port 80, and the sslip.io name must resolve to the Elastic IP. Try `curl -I http://<elastic ip>`, and read Caddy's log stream.
+- **HTTPS doesn't come up:** Let's Encrypt must reach port 80, and the site address must resolve to the Elastic IP. Try `curl -I http://<elastic ip>`, and read Caddy's log stream.
+- **The smoke test keeps reporting a self-signed certificate, or the browser shows a block page:** your network's DNS doesn't return the Elastic IP for the site address. Compare `nslookup "${SITE_URL#https://}"` with `nslookup "${SITE_URL#https://}" 1.1.1.1`: in both, the `Address:` line under `Name:` should show the stack's Elastic IP, which `output ElasticIp` prints. On at least one Romanian provider's network, every sslip.io name resolves to a block page that cites an order of the authorities, which is why the stack uses nip.io. If a network blocks nip.io too, give `SiteAddress` a name it resolves, such as a domain of your own ([Update the stack](#update-the-stack)).
 - **The deploy fails at `migrate`:** if it can't reach MySQL, the database may still be starting, so run step 7 again. If it names migrations on both sides, the database and the image have diverged, for example after a reverted migration. Running step 7 again won't help: fix the migrations in the code, then deploy the new image.
 
 ## Teardown (about 10 minutes)
@@ -310,7 +313,7 @@ aws budgets delete-budget --account-id "$ACCOUNT" --budget-name hello-world-gros
 aws budgets delete-budget --account-id "$ACCOUNT" --budget-name hello-world-net-cost
 ```
 
-Everything the stack created goes with it: the instance with its disk and Elastic IP, the database with its backups, the secret and the logs. The GHCR package stays on GitHub, where it's free; delete it there if you like. The Elastic IP goes back to AWS, so its sslip.io address may later reach someone else's server: drop any links to it.
+Everything the stack created goes with it: the instance with its disk and Elastic IP, the database with its backups, the secret and the logs. The GHCR package stays on GitHub, where it's free; delete it there if you like. The Elastic IP goes back to AWS, so its nip.io address may later reach someone else's server: drop any links to it.
 
 Prefer deleting to stopping. A stopped instance still pays for its Elastic IP, and RDS starts a stopped database again after 7 days.
 

@@ -18,7 +18,7 @@ In US dollars a month, at on-demand list prices for eu-central-1 (AWS Price List
 | Logs | CloudWatch Logs through Docker's awslogs driver: 2 GB, then 10 GB ingested a month | Logs outlive the instance | 1.32 | 6.62 |
 | Alarms | 5 CloudWatch alarms: EC2 status and CPU; RDS CPU, storage and connections | Someone hears when production is in trouble | – | 0.50 |
 | Egress | Data out: 5 GB, then 50 GB, at $0.09/GB | | 0.45 | 4.50 |
-| DNS and TLS | Staging: sslip.io and Let's Encrypt. Production: a Route 53 zone and a real domain | HTTPS for the demo without buying a domain | 0.00 | 0.54 |
+| DNS and TLS | Staging: a nip.io name and Let's Encrypt. Production: a Route 53 zone and a real domain | HTTPS for the demo without buying a domain | 0.00 | 0.54 |
 | Images and CI | GHCR (a public package) and GitHub Actions (a public repository) | Free | 0.00 | 0.00 |
 | Map tiles | OpenStreetMap's tile servers | No API key; Leaflet's default | 0.00 | 0.00* |
 | **List total** | | | **37.97** | **92.59** |
@@ -59,6 +59,8 @@ browser ─HTTPS─► Elastic IP ─► Caddy :443 ─► app :3000 ─TLS─�
                                    (public subnet)
 Leaflet loads the map tiles straight from tile.openstreetmap.org.
 ```
+
+The demo needs no domain. Its address, `3-125-55-249.nip.io`, is a name that nip.io's DNS resolves to the IP address it spells, and Caddy gets a Let's Encrypt certificate for it. The demo first ran on sslip.io, the same service under another name, until it turned out that at least one Romanian provider blocks sslip.io by DNS. Production would use its own domain instead of a shared service.
 
 ## What the demo stack creates
 

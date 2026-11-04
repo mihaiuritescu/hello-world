@@ -1,6 +1,6 @@
 # Caddy gets and renews the HTTPS certificate for the site address, redirects HTTP to HTTPS, and
 # passes everything to the app, WebSockets included. SITE_ADDRESS is the instance's
-# <ip-with-dashes>.sslip.io name, or a real domain.
+# <ip-with-dashes>.nip.io name, or a real domain.
 {$SITE_ADDRESS} {
 	encode zstd gzip
 	header -Server

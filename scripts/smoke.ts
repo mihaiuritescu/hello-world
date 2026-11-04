@@ -2,7 +2,7 @@
 // can reach its database, and that a browser's WebSocket connects.
 //
 // Usage: node scripts/smoke.ts <base URL> <expected version>
-//   e.g. node scripts/smoke.ts https://1-2-3-4.sslip.io 0123456789abcdef0123456789abcdef01234567
+//   e.g. node scripts/smoke.ts https://1-2-3-4.nip.io 0123456789abcdef0123456789abcdef01234567
 import { setTimeout as delay } from 'node:timers/promises'
 import { io } from 'socket.io-client'
 

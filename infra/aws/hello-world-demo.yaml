@@ -27,10 +27,12 @@ Parameters:
     Description: Days of automated backups. The AWS Free plan allows 1; a Paid plan up to 7 here.
   SiteAddress:
     Type: String
+    # Empty means <a-b-c-d>.nip.io, a name that nip.io resolves to a.b.c.d. Its twin sslip.io does
+    # the same, but at least one Romanian provider blocks sslip.io by DNS.
     Default: ''
     AllowedPattern: '^$|^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
     Description: >-
-      A domain that points at the Elastic IP. Leave it empty to use <ip-with-dashes>.sslip.io.
+      A domain that points at the Elastic IP. Leave it empty to use <ip-with-dashes>.nip.io.
   GitHubRepository:
     Type: String
     Default: mihaiuritescu/hello-world
@@ -383,7 +385,7 @@ Resources:
                       - !Ref SiteAddress
                       - !Join [
                           '',
-                          [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.sslip.io'],
+                          [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.nip.io'],
                         ]
 
 Outputs:
@@ -394,7 +396,7 @@ Outputs:
       - Site: !If
           - HasSiteAddress
           - !Ref SiteAddress
-          - !Join ['', [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.sslip.io']]
+          - !Join ['', [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.nip.io']]
   ElasticIp:
     Description: The instance's public address.
     Value: !GetAtt ElasticIp.PublicIp
