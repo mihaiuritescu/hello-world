@@ -133,6 +133,16 @@ describe('rooms store', () => {
     expect(rooms.isDeleted(3)).toBe(true)
   })
 
+  it('remembers only the latest deletions, so a stream of them cannot grow a tab without end', () => {
+    const rooms = useRoomsStore()
+
+    for (let id = 1; id <= LIMITS.listedRooms + 1; id += 1) rooms.remove(id)
+
+    expect(rooms.isDeleted(1)).toBe(false)
+    expect(rooms.isDeleted(2)).toBe(true)
+    expect(rooms.isDeleted(LIMITS.listedRooms + 1)).toBe(true)
+  })
+
   it('drops the rooms a reload shows are gone, deleted while this client was not listening', async () => {
     requestJsonMock.mockResolvedValueOnce({ rooms: [room(1), room(2), room(3)] })
     const rooms = useRoomsStore()

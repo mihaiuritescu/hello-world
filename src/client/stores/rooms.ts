@@ -11,8 +11,9 @@ export const useRoomsStore = defineStore('rooms', () => {
   const session = useSessionStore()
   const byId = ref(new Map<number, Room>())
   /**
-   * The rooms known to be deleted. Room ids are never reused, so a deleted room never comes back:
-   * a list or an answer that left the server before the delete can't bring it back (I4).
+   * The rooms known to be deleted, the latest ones. Room ids are never reused, so a deleted room
+   * never comes back: a list or an answer that left the server before the delete can't bring it
+   * back (I4).
    */
   const deletedIds = ref(new Set<number>())
   /** The last load's result. It stays while a reload runs, so an error and its Retry stay too. */
@@ -71,9 +72,19 @@ export const useRoomsStore = defineStore('rooms', () => {
     confirmedAt.delete(oldest)
   }
 
-  /** Forgets a deleted room for good, whether this browser deleted it or heard that it was. */
+  /**
+   * Forgets a deleted room, whether this browser deleted it or heard that it was. Only the latest
+   * deletions are remembered, as many as the list holds, so a flood of them can't grow an open tab
+   * without end. That is enough: a stale copy of a deleted room can only come from a request
+   * already on its way, and requests time out within seconds.
+   */
   function remove(roomId: number): void {
     deletedIds.value.add(roomId)
+    if (deletedIds.value.size > LIMITS.listedRooms) {
+      // A Set iterates in insertion order, so its first id is the earliest deletion.
+      const earliest = deletedIds.value.values().next().value
+      if (earliest !== undefined) deletedIds.value.delete(earliest)
+    }
     byId.value.delete(roomId)
     confirmedAt.delete(roomId)
   }
