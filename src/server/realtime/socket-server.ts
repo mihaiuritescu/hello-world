@@ -118,6 +118,20 @@ export function attachSocketServer(
 
   const presence = trackPresence(io, presenceIntervalMs)
 
+  // A browser opens one socket on its connection. A burst of CONNECT packets down one WebSocket
+  // would open a socket for each, past the cap per address, into the online count and into every
+  // broadcast. The second and later ones are refused, until the first one leaves.
+  const withSocket = new WeakSet<object>()
+  io.use((socket, next) => {
+    if (withSocket.has(socket.conn)) {
+      next(new Error('ONE_SOCKET_PER_CONNECTION'))
+      return
+    }
+    withSocket.add(socket.conn)
+    socket.on('disconnect', () => withSocket.delete(socket.conn))
+    next()
+  })
+
   io.on('connection', (socket) => {
     presence.joined(socket)
     limitEvents(socket, subscriptionsPerMinute)

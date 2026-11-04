@@ -3,12 +3,23 @@ import { EventEmitter } from 'node:events'
 import type { CreatedRoom, Message } from '#shared/domain.ts'
 import type { Presence } from '#shared/events.ts'
 import Fastify, { type FastifyInstance } from 'fastify'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from 'vitest'
 import { resetDatabase } from '../test/reset-db.ts'
 import {
   connectRecording,
   connectTo,
   nextEvent,
+  openRawSocketIo,
   openSilentWebSocket,
   portOf,
   untyped,
@@ -428,6 +439,20 @@ describe('online count', () => {
     other.socket.disconnect()
 
     expect(await closed).toEqual({ online: 1 })
+  })
+
+  it('opens one socket per connection, however many a client asks for in one burst', async () => {
+    const port = await listening(60_000)
+    const raw = await openRawSocketIo(port)
+    onTestFinished(() => raw.close())
+
+    raw.send(Array.from({ length: 10 }, () => '40'))
+
+    // Every CONNECT gets an answer: 40 when it opened a socket, 44 when it was refused.
+    await expect.poll(() => raw.received.filter((packet) => /^4[04]/.test(packet))).toHaveLength(10)
+    expect(raw.received.filter((packet) => packet.startsWith('40'))).toHaveLength(1)
+    const watcher = await join(port)
+    await expect.poll(() => watcher.heard[0]).toEqual({ online: 2 })
   })
 
   it('sends everyone at most two counts while many windows open at once', async () => {
