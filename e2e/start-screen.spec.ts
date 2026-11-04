@@ -30,6 +30,16 @@ test.describe('start screen and header (FR-1, FR-10)', () => {
     await expect(header).toContainText('1 online')
   })
 
+  test('keeps the description in the header on a phone, cut to one line', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    await page.goto('/')
+
+    const description = page.getByRole('banner').getByText('Drop a pin anywhere on the map')
+    await expect(description).toBeVisible()
+    await expect(page.getByRole('banner')).toContainText('1 online')
+  })
+
   test('keeps the zoom controls clear of the header', async ({ page }) => {
     await page.goto('/')
 

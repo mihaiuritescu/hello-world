@@ -11,7 +11,8 @@ const realtime = useRealtimeStore()
     <v-icon :icon="mdiEarth" color="primary" class="app-header__logo" />
     <div class="app-header__titles">
       <h1 class="text-title-large font-weight-bold">Hello World</h1>
-      <p class="text-body-medium text-medium-emphasis d-none d-sm-block">
+      <!-- On a narrow screen the line is cut short with an ellipsis, rather than hidden. -->
+      <p class="text-body-medium text-medium-emphasis">
         Drop a pin anywhere on the map and chat with whoever joins you.
       </p>
     </div>
