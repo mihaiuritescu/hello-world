@@ -17,8 +17,16 @@ vi.mock('../lib/http.ts', async (importOriginal) => ({
 vi.mock('../lib/socket.ts', () => ({ connectSocket: vi.fn() }))
 const requestJsonMock = vi.mocked(requestJson)
 
-function room(id: number): Room {
-  return { id, lat: id, lng: id, createdAt: '2026-11-02T10:00:00.000Z' }
+function room(id: number, changes: Partial<Room> = {}): Room {
+  return {
+    id,
+    lat: id,
+    lng: id,
+    name: null,
+    revision: 0,
+    createdAt: '2026-11-02T10:00:00.000Z',
+    ...changes,
+  }
 }
 
 function message(id: number, roomId: number): Message {
@@ -111,6 +119,15 @@ describe('realtime store', () => {
 
     expect(useRoomsStore().byId.get(5)).toEqual(room(5))
     expect(useMessagesStore().listFor(5)).toEqual([message(9, 5)])
+  })
+
+  it('applies a rename the server announces', async () => {
+    await liveStore()
+    fake.receive('room:created', room(5))
+
+    fake.receive('room:updated', room(5, { name: 'Picnic', revision: 1 }))
+
+    expect(useRoomsStore().byId.get(5)).toEqual(room(5, { name: 'Picnic', revision: 1 }))
   })
 
   it('reports whether updates arrive live', () => {

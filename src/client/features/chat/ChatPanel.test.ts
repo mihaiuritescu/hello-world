@@ -16,8 +16,16 @@ vi.mock('../../lib/http.ts', async (importOriginal) => ({
 }))
 const requestJsonMock = vi.mocked(requestJson)
 
-function room(id: number): Room {
-  return { id, lat: 1, lng: 2, createdAt: '2026-11-02T10:00:00.000Z' }
+function room(id: number, changes: Partial<Room> = {}): Room {
+  return {
+    id,
+    lat: 1,
+    lng: 2,
+    name: null,
+    revision: 0,
+    createdAt: '2026-11-02T10:00:00.000Z',
+    ...changes,
+  }
 }
 
 const message: Message = {

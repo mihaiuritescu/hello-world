@@ -1,16 +1,23 @@
-import type { Room } from '#shared/domain.ts'
+import type { CreatedRoom, Room } from '#shared/domain.ts'
+import { sql } from 'kysely'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { silentBroadcaster, type Broadcaster } from '../realtime/broadcaster.ts'
 import { resetDatabase } from '../test/reset-db.ts'
 import { createTestApp, type TestApp } from '../test/test-app.ts'
 
 const ISO_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const OWNER_TOKEN = /^[\w-]{43}$/
+
+/** The fields of a room as the API shows it, in order: never an owner token or its hash. */
+const ROOM_FIELDS = ['id', 'lat', 'lng', 'name', 'revision', 'createdAt']
 
 describe('rooms API', () => {
   const announced: Room[] = []
+  const announcedUpdates: Room[] = []
   const broadcaster: Broadcaster = {
     ...silentBroadcaster,
     roomCreated: (room) => announced.push(room),
+    roomUpdated: (room) => announcedUpdates.push(room),
   }
   let testApp: TestApp
 
@@ -25,14 +32,29 @@ describe('rooms API', () => {
   beforeEach(async () => {
     await resetDatabase(testApp.db)
     announced.length = 0
+    announcedUpdates.length = 0
   })
 
   function createRoom(payload: unknown) {
     return testApp.app.inject({ method: 'POST', url: '/api/rooms', payload: payload as object })
   }
 
+  /** Creates a room and returns it with its owner token. */
+  async function createdRoom(): Promise<CreatedRoom> {
+    return (await createRoom({ lat: 1, lng: 2 })).json<CreatedRoom>()
+  }
+
+  function renameRoom(roomId: number, payload: unknown, authorization?: string) {
+    return testApp.app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${roomId}`,
+      payload: payload as object,
+      headers: authorization === undefined ? {} : { authorization },
+    })
+  }
+
   describe('POST /api/rooms', () => {
-    it('creates a room whose id is its number', async () => {
+    it('creates a room whose id is its number, and gives its creator an owner token', async () => {
       const response = await createRoom({ lat: 46.77, lng: 23.59 })
 
       expect(response.statusCode).toBe(201)
@@ -40,14 +62,26 @@ describe('rooms API', () => {
         id: 1,
         lat: 46.77,
         lng: 23.59,
+        name: null,
+        revision: 0,
         createdAt: expect.stringMatching(ISO_UTC_TIMESTAMP) as string,
+        ownerToken: expect.stringMatching(OWNER_TOKEN) as string,
       })
     })
 
-    it('announces the room once it is saved', async () => {
-      const response = await createRoom({ lat: 10, lng: 20 })
+    it('announces the room once it is saved, without its owner token', async () => {
+      const { ownerToken, ...room } = (await createRoom({ lat: 10, lng: 20 })).json<CreatedRoom>()
 
-      expect(announced).toEqual([response.json()])
+      expect(ownerToken).toMatch(OWNER_TOKEN)
+      expect(announced).toEqual([room])
+      expect(Object.keys(announced[0] ?? {})).toEqual(ROOM_FIELDS)
+    })
+
+    it('gives every room its own owner token', async () => {
+      const first = await createdRoom()
+      const second = await createdRoom()
+
+      expect(first.ownerToken).not.toBe(second.ownerToken)
     })
 
     it.each([
@@ -141,6 +175,146 @@ describe('rooms API', () => {
       } finally {
         await restartedApp.close()
       }
+    })
+
+    it('never shows an owner token, or its hash, in the list or a single room', async () => {
+      await createRoom({ lat: 1, lng: 1 })
+
+      const { rooms } = (await testApp.app.inject('/api/rooms')).json<{ rooms: Room[] }>()
+      const room = (await testApp.app.inject('/api/rooms/1')).json<Room>()
+
+      expect(Object.keys(rooms[0] ?? {})).toEqual(ROOM_FIELDS)
+      expect(Object.keys(room)).toEqual(ROOM_FIELDS)
+    })
+  })
+
+  describe('PATCH /api/rooms/:roomId', () => {
+    it('renames a room for its creator, and announces the new name', async () => {
+      const { id, ownerToken } = await createdRoom()
+
+      const response = await renameRoom(id, { name: 'Picnic' }, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(200)
+      expect(response.json()).toMatchObject({ id, name: 'Picnic', revision: 1 })
+      expect(Object.keys(response.json<Room>())).toEqual(ROOM_FIELDS)
+      expect(announcedUpdates).toEqual([response.json()])
+      expect((await testApp.app.inject(`/api/rooms/${id}`)).json()).toEqual(response.json())
+    })
+
+    it('trims the new name', async () => {
+      const { id, ownerToken } = await createdRoom()
+
+      const response = await renameRoom(id, { name: '  Picnic  ' }, `Bearer ${ownerToken}`)
+
+      expect(response.json()).toMatchObject({ name: 'Picnic' })
+    })
+
+    it('brings back the default name for null, as a newer revision', async () => {
+      const { id, ownerToken } = await createdRoom()
+      await renameRoom(id, { name: 'Picnic' }, `Bearer ${ownerToken}`)
+
+      const response = await renameRoom(id, { name: null }, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(200)
+      expect(response.json()).toMatchObject({ name: null, revision: 2 })
+    })
+
+    it.each([
+      ['an HTML tag that runs script', '<img src=x onerror=alert(1)>'],
+      ['a script element', '<script>alert(1)</script>'],
+      ['an SQL statement after a quote', "'); DROP TABLE rooms; --"],
+      ['an SQL condition that is always true', `" OR 1=1 --`],
+    ])('stores %s exactly as written, and the database keeps working', async (_case, name) => {
+      const { id, ownerToken } = await createdRoom()
+
+      const response = await renameRoom(id, { name }, `Bearer ${ownerToken}`)
+
+      expect(response.json()).toMatchObject({ name })
+      const { rooms } = (await testApp.app.inject('/api/rooms')).json<{ rooms: Room[] }>()
+      expect(rooms).toMatchObject([{ id, name }])
+    })
+
+    it('gives each of several renames at once its own revision', async () => {
+      const { id, ownerToken } = await createdRoom()
+
+      const responses = await Promise.all(
+        ['One', 'Two', 'Three', 'Four', 'Five'].map((name) =>
+          renameRoom(id, { name }, `Bearer ${ownerToken}`),
+        ),
+      )
+
+      const revisions = responses.map((response) => response.json<Room>().revision)
+      expect(revisions.toSorted((a, b) => a - b)).toEqual([1, 2, 3, 4, 5])
+      expect((await testApp.app.inject(`/api/rooms/${id}`)).json()).toMatchObject({ revision: 5 })
+    })
+
+    it.each([
+      ['without a token', () => undefined],
+      ['with a malformed token', () => 'Bearer not-a-token'],
+      ['with the token in another scheme', (token: string) => `Basic ${token}`],
+    ])(
+      'refuses a rename %s with 403 NOT_ROOM_OWNER, and changes nothing',
+      async (_case, header) => {
+        const { id, ownerToken } = await createdRoom()
+
+        const response = await renameRoom(id, { name: 'Mine now' }, header(ownerToken))
+
+        expect(response.statusCode).toBe(403)
+        expect(response.json()).toMatchObject({ statusCode: 403, code: 'NOT_ROOM_OWNER' })
+        expect(announcedUpdates).toEqual([])
+        expect((await testApp.app.inject(`/api/rooms/${id}`)).json()).toMatchObject({
+          name: null,
+          revision: 0,
+        })
+      },
+    )
+
+    it("refuses a rename with another room's token", async () => {
+      const mine = await createdRoom()
+      const theirs = await createdRoom()
+
+      const response = await renameRoom(
+        mine.id,
+        { name: 'Mine now' },
+        `Bearer ${theirs.ownerToken}`,
+      )
+
+      expect(response.statusCode).toBe(403)
+      expect(announcedUpdates).toEqual([])
+    })
+
+    it('refuses to rename a room created before rooms had owners', async () => {
+      await sql`INSERT INTO rooms (lat, lng) VALUES (1, 1)`.execute(testApp.db)
+      const { ownerToken } = await createdRoom()
+
+      const response = await renameRoom(1, { name: 'Mine now' }, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(403)
+    })
+
+    it('answers 404 ROOM_NOT_FOUND for a room that does not exist', async () => {
+      const { ownerToken } = await createdRoom()
+
+      const response = await renameRoom(999, { name: 'Picnic' }, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(404)
+      expect(response.json()).toMatchObject({ code: 'ROOM_NOT_FOUND' })
+    })
+
+    it.each([
+      ['an empty name', { name: '' }],
+      ['a 41-character name', { name: 'a'.repeat(41) }],
+      ['a line break', { name: 'Picnic\nat noon' }],
+      ['a text direction control', { name: `${String.fromCodePoint(0x202e)}cinciP` }],
+      ['no name at all', {}],
+    ])('rejects %s with 400 VALIDATION_FAILED', async (_case, payload) => {
+      const { id, ownerToken } = await createdRoom()
+
+      const response = await renameRoom(id, payload, `Bearer ${ownerToken}`)
+
+      expect(response.statusCode).toBe(400)
+      expect(response.json()).toMatchObject({ code: 'VALIDATION_FAILED' })
+      expect(announcedUpdates).toEqual([])
     })
   })
 })

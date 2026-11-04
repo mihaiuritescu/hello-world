@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import type { Room } from '#shared/domain.ts'
 import { computed, nextTick, useTemplateRef, watch } from 'vue'
-import { roomTitle } from '../../lib/roomTitle.ts'
 import { useMessagesStore } from '../../stores/messages.ts'
 import { useRealtimeStore } from '../../stores/realtime.ts'
 import { useRoomsStore } from '../../stores/rooms.ts'
-import ConnectionChip from './ConnectionChip.vue'
 import MessageComposer from './MessageComposer.vue'
 import MessageList from './MessageList.vue'
+import RoomHeader from './RoomHeader.vue'
 
 const props = defineProps<{ room: Room | null }>()
 const messages = useMessagesStore()
@@ -46,10 +45,8 @@ async function showSentMessage(): Promise<void> {
 <template>
   <v-card tag="aside" class="chat-panel" aria-label="Chat" elevation="8" rounded="lg">
     <template v-if="room">
-      <div class="chat-panel__header">
-        <v-card-title tag="h2">{{ roomTitle(room) }}</v-card-title>
-        <ConnectionChip :status="realtime.status" class="mr-4" />
-      </div>
+      <!-- Keyed by room, so a rename left open in one room never carries over to the next. -->
+      <RoomHeader :key="`header-${room.id}`" :room="room" />
       <!-- Keyed by room, so each room opens on its newest messages. The draft lives in the
            drafts store, so it comes back with the room. -->
       <MessageList
@@ -85,12 +82,5 @@ async function showSentMessage(): Promise<void> {
   /* Stops short of the bottom edge, where the map's attribution must stay visible. The message
      list scrolls inside this height. */
   max-height: calc(100% - 72px);
-}
-
-.chat-panel__header {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
 }
 </style>

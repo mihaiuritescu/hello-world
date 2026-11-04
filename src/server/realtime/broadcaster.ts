@@ -7,11 +7,13 @@ import type { Message, Room } from '#shared/domain.ts'
  */
 export interface Broadcaster {
   roomCreated(room: Room): void
+  roomUpdated(room: Room): void
   messageCreated(message: Message): void
 }
 
 /** Announces nothing. For tests that ignore announcements, or replace only one of them. */
 export const silentBroadcaster: Broadcaster = {
   roomCreated: () => {},
+  roomUpdated: () => {},
   messageCreated: () => {},
 }

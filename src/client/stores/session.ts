@@ -17,7 +17,40 @@ export const useSessionStore = defineStore('session', () => {
   /** The name the user writes as. It stays on this device, so they type it only once. */
   const authorName = useLocalStorage('hello-world.authorName', '')
 
-  return { selectedRoomId, selectRoom, authorName }
+  /**
+   * The owner token of each room this browser created, by room id. Holding a room's token is what
+   * lets this browser rename or delete it, so the tokens stay on this device, like the name.
+   */
+  const ownerTokens = useLocalStorage<Record<string, unknown>>('hello-world.ownerTokens', {})
+
+  /** The stored tokens, or none when local storage holds something else under their key. */
+  function storedTokens(): Record<string, unknown> {
+    const tokens: unknown = ownerTokens.value
+    return typeof tokens === 'object' && tokens !== null ? (tokens as Record<string, unknown>) : {}
+  }
+
+  function ownerTokenFor(roomId: number): string | undefined {
+    const token = storedTokens()[String(roomId)]
+    return typeof token === 'string' ? token : undefined
+  }
+
+  /** Whether this browser created the room, and so may rename or delete it. */
+  function ownsRoom(roomId: number): boolean {
+    return ownerTokenFor(roomId) !== undefined
+  }
+
+  function rememberOwnerToken(roomId: number, token: string): void {
+    ownerTokens.value = { ...storedTokens(), [roomId]: token }
+  }
+
+  return {
+    selectedRoomId,
+    selectRoom,
+    authorName,
+    ownerTokenFor,
+    ownsRoom,
+    rememberOwnerToken,
+  }
 })
 
 function parseRoomId(value: string | undefined): number | null {

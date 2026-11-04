@@ -79,7 +79,7 @@ export async function buildApp({
   registerRoomRoutes(app, {
     rooms,
     broadcaster: announcer,
-    createsPerMinute: rateLimits.roomsPerMinute,
+    writesPerMinute: rateLimits.roomsPerMinute,
   })
   registerMessageRoutes(app, {
     rooms,

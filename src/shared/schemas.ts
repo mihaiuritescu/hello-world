@@ -54,3 +54,15 @@ export const MessageDraftSchema = z.object({
   body: postedText(LIMITS.messageBody),
 })
 export type MessageDraft = z.infer<typeof MessageDraftSchema>
+
+/**
+ * A room's new name, from its creator. Null brings back the default, "Chatroom N". The name is
+ * stored as written, markup included: clients only ever show it as plain text (I7).
+ */
+export const RoomRenameSchema = z.object({
+  name: postedText(LIMITS.roomName).nullable(),
+})
+export type RoomRename = z.infer<typeof RoomRenameSchema>
+
+/** The token that proves a client created a room: 32 random bytes, base64url, unpadded. */
+export const OwnerTokenSchema = z.string().regex(/^[\w-]{43}$/)

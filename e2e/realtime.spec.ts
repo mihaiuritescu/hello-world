@@ -90,6 +90,25 @@ test.describe('real time (FR-6)', () => {
     }
   })
 
+  test("a room's new name reaches the other window within a second", async ({
+    page,
+    secondPage,
+  }) => {
+    await page.goto('/')
+    await page.locator('.leaflet-container').click({ position: WEST })
+    await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+    await openLiveRoom(secondPage, 1)
+
+    await page.getByRole('button', { name: 'Rename this room' }).click()
+    await page.getByRole('textbox', { name: 'Room name' }).fill('Picnic')
+    await page.getByRole('button', { name: 'Save' }).click()
+
+    await expect(secondPage.getByRole('heading', { name: 'Picnic' })).toBeVisible({
+      timeout: 1_000,
+    })
+    await expect(secondPage.getByTitle('Picnic')).toBeVisible()
+  })
+
   test('a window that lost its connection catches up when it reconnects', async ({
     page,
     secondPage,

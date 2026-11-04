@@ -67,8 +67,16 @@ describe('ChatMap pins', () => {
   })
 
   /** A room 5° of latitude from the next one: far enough apart that their pins never merge. */
-  function room(id: number, at = { lat: 40 + id * 5, lng: 20 }): Room {
-    return { id, ...at, createdAt: '2026-11-02T10:00:00.000Z' }
+  function room(id: number, changes: Partial<Room> = {}): Room {
+    return {
+      id,
+      lat: 40 + id * 5,
+      lng: 20,
+      name: null,
+      revision: 0,
+      createdAt: '2026-11-02T10:00:00.000Z',
+      ...changes,
+    }
   }
 
   const SAME_SPOT = { lat: 47, lng: 20 }
@@ -117,5 +125,36 @@ describe('ChatMap pins', () => {
     expect(screen.queryByTitle('Chatroom 1')).not.toBeInTheDocument()
     expect(screen.getByTitle('Chatroom 2')).toBeInTheDocument()
     expect(screen.getByTitle('Chatroom 3')).toBeInTheDocument()
+  })
+
+  it("names a pin after its room, and follows the room's renames", async () => {
+    const { wrapper } = await renderMap([room(1)])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    await wrapper.setProps({ rooms: [room(1, { name: 'Picnic', revision: 1 })] })
+
+    expect(screen.queryByTitle('Chatroom 1')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Picnic')).toHaveAttribute('alt', 'Picnic')
+  })
+
+  it('names a pin drawn again after a circle with its newest name', async () => {
+    const { wrapper } = await renderMap([room(1, SAME_SPOT), room(2, SAME_SPOT)])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    await wrapper.setProps({ rooms: [room(1, { ...SAME_SPOT, name: 'Picnic' }), room(2)] })
+
+    expect(screen.getByTitle('Picnic')).toBeInTheDocument()
+  })
+
+  it('puts a name with markup on its pin as plain text, which runs nothing', async () => {
+    const name = '<img src=x onerror=alert(1)>'
+    const { wrapper } = await renderMap([room(1, { name })])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    expect(screen.getByTitle(name)).toHaveAttribute('alt', name)
+    expect(document.querySelector('img[src="x"], [onerror]')).toBeNull()
   })
 })

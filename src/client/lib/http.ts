@@ -17,19 +17,23 @@ export function isRateLimited(error: unknown): boolean {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
+  headers?: Record<string, string>
 }
 
 /** A request that hangs longer than this fails, instead of blocking the UI forever. */
 const REQUEST_TIMEOUT_MS = 10_000
 
-/** Calls the API on this origin and returns the JSON body. Throws ApiError on a non-2xx status. */
+/**
+ * Calls the API on this origin and returns the JSON body, or null for an empty one. Throws
+ * ApiError on a non-2xx status.
+ */
 export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body } = options
+  const { method = 'GET', body, headers = {} } = options
   const response = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: body === undefined ? headers : { 'content-type': 'application/json', ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })

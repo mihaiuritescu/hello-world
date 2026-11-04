@@ -1,4 +1,4 @@
-import { LIMITS, type Room } from '#shared/domain.ts'
+import { LIMITS, type CreatedRoom, type Room } from '#shared/domain.ts'
 import type { Coordinates } from '#shared/schemas.ts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -28,12 +28,15 @@ export const useRoomsStore = defineStore('rooms', () => {
   let settled = 0
 
   /**
-   * Adds or replaces a room. HTTP responses and socket events both come through here. The store
-   * keeps at most `LIMITS.listedRooms` rooms, as a fresh load would: the newest, and the open
-   * room even when it's older. Announced rooms only ever add up, so without the cap a flood of
-   * new rooms would grow an open tab without end.
+   * Adds a room, or a newer copy of one. HTTP responses and socket events both come through here,
+   * in any order, so an older revision never replaces a newer one: a list that left the server
+   * before a rename can't undo it (I4). The store keeps at most `LIMITS.listedRooms` rooms, as a
+   * fresh load would: the newest, and the open room even when it's older. Announced rooms only
+   * ever add up, so without the cap a flood of new rooms would grow an open tab without end.
    */
   function upsert(room: Room): void {
+    const known = byId.value.get(room.id)
+    if (known && known.revision >= room.revision) return
     byId.value.set(room.id, room)
     if (byId.value.size > LIMITS.listedRooms) dropOldest()
   }
@@ -78,11 +81,36 @@ export const useRoomsStore = defineStore('rooms', () => {
     }
   }
 
+  /**
+   * Creates a room. Its owner token, which only this response carries, stays with this browser,
+   * apart from the room: the room itself is the same for every client.
+   */
   async function create(coordinates: Coordinates): Promise<Room> {
-    const room = await requestJson<Room>('/api/rooms', { method: 'POST', body: coordinates })
+    const { ownerToken, ...room } = await requestJson<CreatedRoom>('/api/rooms', {
+      method: 'POST',
+      body: coordinates,
+    })
+    session.rememberOwnerToken(room.id, ownerToken)
     upsert(room)
     return room
   }
 
-  return { byId, status, loading, list, upsert, load, ensureLoaded, create }
+  /** Renames a room this browser created; null brings back its default name. Throws if refused. */
+  async function rename(roomId: number, name: string | null): Promise<void> {
+    upsert(
+      await requestJson<Room>(`/api/rooms/${roomId}`, {
+        method: 'PATCH',
+        body: { name },
+        headers: ownerHeaders(roomId),
+      }),
+    )
+  }
+
+  /** Proof that this browser created the room. Without a token, the server refuses with 403. */
+  function ownerHeaders(roomId: number): Record<string, string> {
+    const token = session.ownerTokenFor(roomId)
+    return token === undefined ? {} : { authorization: `Bearer ${token}` }
+  }
+
+  return { byId, status, loading, list, upsert, load, ensureLoaded, create, rename }
 })

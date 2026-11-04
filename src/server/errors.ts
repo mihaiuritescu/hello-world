@@ -51,6 +51,18 @@ export function roomNotFound(roomId: number): HttpError {
   return new HttpError(404, 'ROOM_NOT_FOUND', `Room ${roomId} does not exist.`)
 }
 
+/**
+ * The 403 for a change to a room without its owner token: the request sent none, or another
+ * room's, or the room was made before rooms had owners.
+ */
+export function notRoomOwner(roomId: number): HttpError {
+  return new HttpError(
+    403,
+    'NOT_ROOM_OWNER',
+    `Only the browser that created room ${roomId} can change it.`,
+  )
+}
+
 /** The 429 for a client over a rate limit. `after` says when to try again, such as "1 minute". */
 export function tooManyRequests(after: string): HttpError {
   return new HttpError(429, 'RATE_LIMITED', `Too many requests. Try again in ${after}.`)

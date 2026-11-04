@@ -16,6 +16,8 @@ export interface Presence {
 export interface ServerToClientEvents {
   /** Sent to every client. */
   'room:created': (room: Room) => void
+  /** Sent to every client when a room's creator renames it. */
+  'room:updated': (room: Room) => void
   /** Sent to the clients that have the message's room open. */
   'message:created': (message: Message) => void
   /** Sent to a client as it connects, then to every client, at most once a second. */

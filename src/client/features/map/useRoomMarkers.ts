@@ -82,11 +82,29 @@ export function useRoomMarkers(
 
   function drawPin(instance: L.Map, room: Room): void {
     let pin = pins.get(room.id)
-    if (!pin) {
+    if (pin) {
+      setTitle(pin, roomTitle(room))
+    } else {
       pin = createPin(room)
       pins.set(room.id, pin)
     }
     if (!instance.hasLayer(pin)) pin.addTo(instance)
+  }
+
+  /**
+   * Gives a pin its room's new name. Leaflet reads `title` and `alt` only when it makes the pin's
+   * image, so the image on the map is renamed directly, through DOM properties: a name is never
+   * parsed as HTML (I7).
+   */
+  function setTitle(pin: L.Marker, title: string): void {
+    if (pin.options.title === title) return
+    pin.options.title = title
+    pin.options.alt = title
+    const image = pin.getElement()
+    if (image instanceof HTMLImageElement) {
+      image.title = title
+      image.alt = title
+    }
   }
 
   function createPin(room: Room): L.Marker {

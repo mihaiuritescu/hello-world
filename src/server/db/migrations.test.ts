@@ -37,4 +37,21 @@ describe('migrations', () => {
       sql`INSERT INTO rooms (lat, lng) VALUES (91, 0)`.execute(db),
     ).rejects.toMatchObject({ errno: ER_CHECK_CONSTRAINT_VIOLATED })
   })
+
+  // Rows written by the previous version, which knows nothing of names or owners.
+  it('give a room no name, revision 0 and no owner unless told otherwise', async () => {
+    const { insertId } = await sql`INSERT INTO rooms (lat, lng) VALUES (1, 1)`.execute(db)
+
+    const { rows } = await sql<{ name: string | null; revision: number; owner: Buffer | null }>`
+      SELECT name, revision, owner_token_hash AS owner FROM rooms WHERE id = ${insertId}
+    `.execute(db)
+
+    expect(rows).toEqual([{ name: null, revision: 0, owner: null }])
+  })
+
+  it('reject an empty room name in the database', async () => {
+    await expect(
+      sql`INSERT INTO rooms (lat, lng, name) VALUES (0, 0, '')`.execute(db),
+    ).rejects.toMatchObject({ errno: ER_CHECK_CONSTRAINT_VIOLATED })
+  })
 })

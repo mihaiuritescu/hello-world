@@ -64,6 +64,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     socket.on('disconnect', onDisconnect)
     // Announcements go through the same upserts as HTTP responses, which drop duplicates (I4).
     socket.on('room:created', rooms.upsert)
+    socket.on('room:updated', rooms.upsert)
     socket.on('message:created', messages.upsert)
     socket.on('presence:changed', (presence) => {
       online.value = presence.online

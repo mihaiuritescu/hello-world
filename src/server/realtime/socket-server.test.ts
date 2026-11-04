@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
-import type { Message } from '#shared/domain.ts'
+import type { CreatedRoom, Message } from '#shared/domain.ts'
 import type { Presence } from '#shared/events.ts'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -61,11 +61,28 @@ describe('real-time delivery', () => {
     })
   }
 
-  it('tells every connected client about a new room', async () => {
+  it('tells every connected client about a new room, but not its owner token', async () => {
     const [first, second] = await Promise.all([connect(), connect()])
     const heard = Promise.all([nextEvent(first, 'room:created'), nextEvent(second, 'room:created')])
 
-    const response = await createRoom()
+    const { ownerToken, ...room } = (await createRoom()).json<CreatedRoom>()
+
+    const rooms = await heard
+    expect(rooms).toEqual([room, room])
+    expect(JSON.stringify(rooms)).not.toContain(ownerToken)
+  })
+
+  it('tells every connected client about a renamed room', async () => {
+    const [first, second] = await Promise.all([connect(), connect()])
+    const { id, ownerToken } = (await createRoom()).json<CreatedRoom>()
+    const heard = Promise.all([nextEvent(first, 'room:updated'), nextEvent(second, 'room:updated')])
+
+    const response = await testApp.app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${id}`,
+      payload: { name: 'Picnic' },
+      headers: { authorization: `Bearer ${ownerToken}` },
+    })
 
     expect(await heard).toEqual([response.json(), response.json()])
   })
@@ -252,7 +269,14 @@ describe('closeWhenStalled', () => {
     const socket = await connectTo(portOf(bare))
     try {
       const dropped = new Promise<string>((resolve) => socket.once('disconnect', resolve))
-      const room = { id: 1, lat: 1, lng: 1, createdAt: '2026-11-03T10:00:00.000Z' }
+      const room = {
+        id: 1,
+        lat: 1,
+        lng: 1,
+        name: null,
+        revision: 0,
+        createdAt: '2026-11-03T10:00:00.000Z',
+      }
 
       for (let sent = 0; sent < 600; sent += 1) broadcaster.roomCreated(room)
 

@@ -18,8 +18,16 @@ vi.mock('./lib/http.ts', async (importOriginal) => ({
 vi.mock('./lib/socket.ts', () => ({ connectSocket: vi.fn() }))
 const requestJsonMock = vi.mocked(requestJson)
 
-function room(id: number): Room {
-  return { id, lat: 1, lng: 2, createdAt: '2026-11-03T10:00:00.000Z' }
+function room(id: number, changes: Partial<Room> = {}): Room {
+  return {
+    id,
+    lat: 1,
+    lng: 2,
+    name: null,
+    revision: 0,
+    createdAt: '2026-11-03T10:00:00.000Z',
+    ...changes,
+  }
 }
 
 /** Opens the app at `url`, with the map stubbed: jsdom has no layout for Leaflet. */

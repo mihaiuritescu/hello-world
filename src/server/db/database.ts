@@ -7,6 +7,10 @@ export interface RoomsTable {
   id: Generated<number>
   lat: number
   lng: number
+  name: string | null
+  revision: Generated<number>
+  /** The SHA-256 of the creator's owner token. Null for rooms made before rooms had owners. */
+  owner_token_hash: Buffer | null
   created_at: Generated<Date>
 }
 

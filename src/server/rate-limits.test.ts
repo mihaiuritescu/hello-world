@@ -54,6 +54,26 @@ describe('rate limits', () => {
     expect(await roomCount(app)).toBe(2)
   })
 
+  it('limits renames with the room limit, counted apart from creations', async () => {
+    const app = await appWithLimits({ RATE_LIMIT_ROOMS_PER_MINUTE: '1' })
+    const { ownerToken } = (await createRoom(app)).json<{ ownerToken: string }>()
+    const rename = (name: string) =>
+      app.inject({
+        method: 'PATCH',
+        url: '/api/rooms/1',
+        payload: { name },
+        headers: { authorization: `Bearer ${ownerToken}` },
+      })
+    expect((await rename('First')).statusCode).toBe(200)
+
+    const limited = await rename('Second')
+
+    expect(limited.statusCode).toBe(429)
+    expect(limited.json<{ code: string }>().code).toBe('RATE_LIMITED')
+    const room = await app.inject({ method: 'GET', url: '/api/rooms/1' })
+    expect(room.json<{ name: string }>().name).toBe('First')
+  })
+
   it('stores no message once a client sends too fast', async () => {
     const app = await appWithLimits({ RATE_LIMIT_MESSAGES_PER_MINUTE: '1' })
     await createRoom(app)

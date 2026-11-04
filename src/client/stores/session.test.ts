@@ -66,4 +66,29 @@ describe('session store', () => {
 
     expect(useSessionStore().authorName).toBe('Bob')
   })
+
+  it('remembers the owner token of each room this browser created', () => {
+    const session = useSessionStore()
+
+    session.rememberOwnerToken(5, 'token-5')
+
+    expect(session.ownerTokenFor(5)).toBe('token-5')
+    expect(session.ownsRoom(5)).toBe(true)
+    expect(session.ownsRoom(6)).toBe(false)
+  })
+
+  it('keeps owner tokens on this device, for the next visit', async () => {
+    useSessionStore().rememberOwnerToken(5, 'token-5')
+    await nextTick()
+
+    setActivePinia(createPinia())
+
+    expect(useSessionStore().ownerTokenFor(5)).toBe('token-5')
+  })
+
+  it('ignores a stored owner token that is not text', () => {
+    localStorage.setItem('hello-world.ownerTokens', JSON.stringify({ 5: { not: 'a token' } }))
+
+    expect(useSessionStore().ownsRoom(5)).toBe(false)
+  })
 })

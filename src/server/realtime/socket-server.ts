@@ -147,6 +147,9 @@ export function attachSocketServer(
     roomCreated: (room) => {
       io.emit('room:created', room)
     },
+    roomUpdated: (room) => {
+      io.emit('room:updated', room)
+    },
     messageCreated: (message) => {
       io.to(roomChannel(message.roomId)).emit('message:created', message)
     },

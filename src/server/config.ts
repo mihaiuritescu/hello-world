@@ -62,7 +62,10 @@ export interface DbConfig {
 export interface RateLimits {
   /** API requests a minute. */
   apiPerMinute: number
-  /** Room creations a minute; every connected client hears about each one. */
+  /**
+   * Room creations a minute, and renames a minute, each counted on its own; every connected
+   * client hears about each one.
+   */
   roomsPerMinute: number
   /** Messages sent a minute. */
   messagesPerMinute: number

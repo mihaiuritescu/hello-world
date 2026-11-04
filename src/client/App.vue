@@ -5,7 +5,7 @@ import ChatPanel from './features/chat/ChatPanel.vue'
 import AppHeader from './features/header/AppHeader.vue'
 import ChatMap from './features/map/ChatMap.vue'
 import { isRateLimited } from './lib/http.ts'
-import { roomTitle } from './lib/roomTitle.ts'
+import { defaultRoomTitle } from './lib/roomTitle.ts'
 import { useRealtimeStore } from './stores/realtime.ts'
 import { useRoomsStore } from './stores/rooms.ts'
 import { useSessionStore } from './stores/session.ts'
@@ -30,7 +30,7 @@ onMounted(async () => {
 
 /** Opens the room a link names: it may be older than the rooms the list holds, or not exist. */
 async function openLinkedRoom(roomId: number): Promise<void> {
-  const title = roomTitle({ id: roomId })
+  const title = defaultRoomTitle(roomId)
   try {
     await rooms.ensureLoaded(roomId)
   } catch (error) {

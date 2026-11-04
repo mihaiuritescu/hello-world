@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   CoordinatesSchema,
   MessageDraftSchema,
+  OwnerTokenSchema,
   RoomIdParamsSchema,
+  RoomRenameSchema,
   RoomSubscriptionSchema,
 } from './schemas.ts'
 
@@ -94,5 +96,48 @@ describe('RoomSubscriptionSchema', () => {
     ['no payload at all', null],
   ])('rejects %s', (_case, input) => {
     expect(RoomSubscriptionSchema.safeParse(input).success).toBe(false)
+  })
+})
+
+describe('RoomRenameSchema', () => {
+  it('trims the new name', () => {
+    expect(RoomRenameSchema.parse({ name: '  Picnic  ' })).toEqual({ name: 'Picnic' })
+  })
+
+  it('takes null, which brings back the default name', () => {
+    expect(RoomRenameSchema.parse({ name: null })).toEqual({ name: null })
+  })
+
+  it('keeps markup and quotes as they are: they are only ever shown as text', () => {
+    const name = `<img src=x onerror="alert('hi')">`
+
+    expect(RoomRenameSchema.parse({ name })).toEqual({ name })
+  })
+
+  it.each([
+    ['an empty name', ''],
+    ['a blank name', '   '],
+    ['a 41-character name', 'a'.repeat(41)],
+    ['a line break', 'Picnic\nat noon'],
+    ['a text direction control', `${String.fromCodePoint(0x202e)}cinciP`],
+    ['a missing name', undefined],
+    ['a number', 7],
+  ])('rejects %s', (_case, name) => {
+    expect(RoomRenameSchema.safeParse({ name }).success).toBe(false)
+  })
+})
+
+describe('OwnerTokenSchema', () => {
+  it('accepts 32 bytes in base64url, without padding', () => {
+    expect(OwnerTokenSchema.safeParse(`${'Az09_-'.repeat(7)}x`).success).toBe(true)
+  })
+
+  it.each([
+    ['a token one character short', 'a'.repeat(42)],
+    ['a token one character long', 'a'.repeat(44)],
+    ['standard base64 characters', `${'a'.repeat(41)}+/`],
+    ['padding', `${'a'.repeat(42)}=`],
+  ])('rejects %s', (_case, token) => {
+    expect(OwnerTokenSchema.safeParse(token).success).toBe(false)
   })
 })

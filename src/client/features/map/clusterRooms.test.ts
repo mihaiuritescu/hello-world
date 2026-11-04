@@ -4,7 +4,7 @@ import { clusterRooms, type ScreenPoint } from './clusterRooms.ts'
 
 /** A room drawn at screen position (x, y): the tests place rooms in pixels directly. */
 function room(id: number, x: number, y: number): Room {
-  return { id, lat: y, lng: x, createdAt: '2026-11-04T10:00:00.000Z' }
+  return { id, lat: y, lng: x, name: null, revision: 0, createdAt: '2026-11-04T10:00:00.000Z' }
 }
 
 const onScreen = (r: Room): ScreenPoint => ({ x: r.lng, y: r.lat })
