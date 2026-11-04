@@ -1,15 +1,31 @@
 import type { IncomingMessage } from 'node:http'
 import type { BlockList } from 'node:net'
 import type { Duplex } from 'node:stream'
-import type { ClientToServerEvents, ServerToClientEvents, SubscribeReply } from '#shared/events.ts'
+import type {
+  ClientToServerEvents,
+  Presence,
+  ServerToClientEvents,
+  SubscribeReply,
+} from '#shared/events.ts'
 import { RoomSubscriptionSchema } from '#shared/schemas.ts'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 import { clientAddress } from '../client-address.ts'
 import type { Broadcaster } from './broadcaster.ts'
 
-type AppServer = Server<ClientToServerEvents, ServerToClientEvents>
 type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>
+
+/** The parts of the Socket.IO server that presence tracking uses. */
+interface PresenceServer {
+  of(namespace: '/'): { sockets: { size: number } }
+  emit(event: 'presence:changed', presence: Presence): unknown
+}
+
+/** The parts of a client's socket that presence tracking uses. */
+interface PresenceSocket {
+  emit(event: 'presence:changed', presence: Presence): unknown
+  on(event: 'disconnect', listener: () => void): unknown
+}
 
 /** The parts of an Engine.IO connection, under each Socket.IO one, that this file uses. */
 interface EngineConnection {
@@ -143,9 +159,11 @@ export function attachSocketServer(
  * `intervalMs` ago; then the latest count follows when the interval ends. After a restart, when
  * every client reconnects within seconds, that sends a handful of counts instead of one to each
  * client per reconnect, which would also fill the queues that `closeWhenStalled` watches.
+ *
+ * A count goes out even when it equals the last one sent: clients that joined in between were
+ * told the count of their own moment, which may have been different.
  */
-function trackPresence(io: AppServer, intervalMs: number) {
-  let announced: number | null = null
+export function trackPresence(io: PresenceServer, intervalMs: number) {
   let lastAnnouncedAt = -Infinity
   let timer: NodeJS.Timeout | undefined
   let stopped = false
@@ -154,11 +172,8 @@ function trackPresence(io: AppServer, intervalMs: number) {
 
   function announce(): void {
     timer = undefined
-    const count = online()
-    if (count === announced) return
-    announced = count
     lastAnnouncedAt = Date.now()
-    io.emit('presence:changed', { online: count })
+    io.emit('presence:changed', { online: online() })
   }
 
   // Socket.IO removes a socket from its namespace before 'disconnect' fires, so the count read
@@ -169,7 +184,7 @@ function trackPresence(io: AppServer, intervalMs: number) {
   }
 
   return {
-    joined(socket: ClientSocket): void {
+    joined(socket: PresenceSocket): void {
       socket.emit('presence:changed', { online: online() })
       socket.on('disconnect', changed)
       changed()

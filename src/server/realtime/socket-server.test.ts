@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import type { Message } from '#shared/domain.ts'
+import type { Presence } from '#shared/events.ts'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetDatabase } from '../test/reset-db.ts'
@@ -14,7 +15,7 @@ import {
   type TestSocket,
 } from '../test/socket-client.ts'
 import { createTestApp, type TestApp } from '../test/test-app.ts'
-import { attachSocketServer, closeWhenStalled } from './socket-server.ts'
+import { attachSocketServer, closeWhenStalled, trackPresence } from './socket-server.ts'
 
 describe('real-time delivery', () => {
   let testApp: TestApp
@@ -402,5 +403,93 @@ describe('online count', () => {
     // count to every client for each new window.
     const burst = watcher.heard.filter(({ online }) => online > 1)
     expect(burst.length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('trackPresence', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** A stand-in for the Socket.IO server. The test plays the clients that join and leave. */
+  function fakeServer(intervalMs: number) {
+    const sockets = new Map<number, EventEmitter>()
+    const broadcasts: Presence[] = []
+    const presence = trackPresence(
+      { of: () => ({ sockets }), emit: (_event, count) => broadcasts.push(count) },
+      intervalMs,
+    )
+    let joined = 0
+    return {
+      presence,
+      /** Counts sent to every client, in order. */
+      broadcasts,
+      /** Connects a client. `heard` holds what the server sent to it alone. */
+      join() {
+        joined += 1
+        const id = joined
+        const socket = new EventEmitter()
+        const heard: Presence[] = []
+        socket.on('presence:changed', (count: Presence) => heard.push(count))
+        sockets.set(id, socket)
+        presence.joined(socket)
+        return {
+          heard,
+          // Socket.IO forgets a socket before it fires 'disconnect'.
+          leave() {
+            sockets.delete(id)
+            socket.emit('disconnect')
+          },
+        }
+      },
+    }
+  }
+
+  it('sends the count after a change even when it equals the last count sent', () => {
+    vi.useFakeTimers()
+    const server = fakeServer(1_000)
+    const first = server.join()
+    const second = server.join()
+    vi.advanceTimersByTime(1_000)
+    expect(server.broadcasts.at(-1)).toEqual({ online: 2 })
+    const sentBefore = server.broadcasts.length
+
+    first.leave()
+    second.leave()
+    expect(server.join().heard).toEqual([{ online: 1 }])
+    server.join()
+    vi.advanceTimersByTime(1_000)
+
+    // The third client was told 1 as it joined, so it must hear that the count is 2 again.
+    expect(server.broadcasts.slice(sentBefore)).toEqual([{ online: 2 }])
+  })
+
+  it('sends a change at once, then at most one count per interval', () => {
+    vi.useFakeTimers()
+    const server = fakeServer(1_000)
+    server.join()
+    vi.advanceTimersByTime(0)
+    expect(server.broadcasts).toEqual([{ online: 1 }])
+
+    for (let joined = 0; joined < 5; joined += 1) server.join()
+    vi.advanceTimersByTime(999)
+    expect(server.broadcasts).toEqual([{ online: 1 }])
+
+    vi.advanceTimersByTime(1)
+    expect(server.broadcasts).toEqual([{ online: 1 }, { online: 6 }])
+  })
+
+  it('sends nothing once stopped, though every client then leaves', () => {
+    vi.useFakeTimers()
+    const server = fakeServer(1_000)
+    const client = server.join()
+    vi.advanceTimersByTime(1_000)
+    const sentBefore = server.broadcasts.length
+
+    server.presence.stop()
+    client.leave()
+    vi.advanceTimersByTime(5_000)
+
+    expect(server.broadcasts).toHaveLength(sentBefore)
   })
 })
