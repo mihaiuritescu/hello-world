@@ -2,7 +2,9 @@
 
 A real-time chat on a world map: click anywhere to drop a pin, open its chatroom, and talk to whoever else is there. Built for the Wolfpack Digital full-stack test.
 
-> **Status:** rooms, messages and live updates work, everything persists, and each client has rate limits. The AWS demo is ready to deploy from [the runbook](infra/aws/RUNBOOK.md); the self-review comes next. See the [PRD](docs/PRD.md) for the plan.
+**Live demo:** <https://3-125-55-249.nip.io>. Open it in two windows to watch pins and messages arrive live.
+
+> **Status:** rooms, messages and live updates work, everything persists, and each client has rate limits. The demo runs on AWS; the self-review comes next. See the [PRD](docs/PRD.md) for the plan.
 
 ## Using it
 
@@ -97,7 +99,7 @@ The [PRD](docs/PRD.md) has the decisions and the invariants behind them.
 
 ## Deployment
 
-The demo deploys to AWS: one EC2 instance behind Caddy and Let's Encrypt, with RDS for MySQL, from a single CloudFormation stack. [The runbook](infra/aws/RUNBOOK.md) gives every step, from the first check to the teardown, and [Infrastructure and costs](docs/INFRASTRUCTURE.md) covers the architecture and the monthly cost of staging and production.
+The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behind Caddy and Let's Encrypt, with RDS for MySQL, from a single CloudFormation stack. Its address comes from nip.io, which resolves a name like `3-125-55-249.nip.io` to the IP address it spells, so the demo needs no domain. [The runbook](infra/aws/RUNBOOK.md) gives every step, from the first check to the teardown, and [Infrastructure and costs](docs/INFRASTRUCTURE.md) covers the architecture and the monthly cost of staging and production.
 
 ## Documentation
 
@@ -115,7 +117,7 @@ The demo deploys to AWS: one EC2 instance behind Caddy and Let's Encrypt, with R
 - **Keyboard access:** Enter on the focused map creates a room, and Enter on a pin opens it. axe scans the main screens and the load errors in CI.
 - **Loading, empty and error states,** with Retry.
 - **Rate limits per client,** on the API and on the WebSockets.
-- **A live AWS demo,** with HTTPS, from one CloudFormation stack, and a cost estimate for staging and production.
+- **[A live AWS demo](https://3-125-55-249.nip.io),** with HTTPS, from one CloudFormation stack, and a cost estimate for staging and production.
 - **A multi-agent self-review,** with its report and triage.
 
 ## Limitations
