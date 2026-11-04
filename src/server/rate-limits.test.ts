@@ -89,6 +89,23 @@ describe('rate limits', () => {
     expect((await createRoom(app)).statusCode).toBe(429)
   })
 
+  it('counts creations, renames and deletions of rooms each on their own', async () => {
+    const app = await appWithLimits({ RATE_LIMIT_ROOMS_PER_MINUTE: '1' })
+    const created = await createRoom(app)
+    const { id, ownerToken } = created.json<{ id: number; ownerToken: string }>()
+    const headers = { authorization: `Bearer ${ownerToken}` }
+
+    const renamed = await app.inject({
+      method: 'PATCH',
+      url: `/api/rooms/${id}`,
+      payload: { name: 'Picnic' },
+      headers,
+    })
+    const deleted = await app.inject({ method: 'DELETE', url: `/api/rooms/${id}`, headers })
+
+    expect([created.statusCode, renamed.statusCode, deleted.statusCode]).toEqual([201, 200, 204])
+  })
+
   it('stores no message once a client sends too fast', async () => {
     const app = await appWithLimits({ RATE_LIMIT_MESSAGES_PER_MINUTE: '1' })
     await createRoom(app)

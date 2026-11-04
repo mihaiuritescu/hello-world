@@ -101,6 +101,21 @@ describe('ChatMap pins', () => {
     expect(screen.getByRole('button', { name: '2 chatrooms' })).toBeInTheDocument()
   })
 
+  it("updates a circle's count as rooms join it and leave it, live", async () => {
+    const { wrapper } = await renderMap([room(1, SAME_SPOT), room(2, SAME_SPOT)])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    await wrapper.setProps({ rooms: [room(1, SAME_SPOT), room(2, SAME_SPOT), room(3, SAME_SPOT)] })
+    expect(screen.getByRole('button', { name: '3 chatrooms' })).toHaveTextContent('3')
+    expect(screen.queryByRole('button', { name: '2 chatrooms' })).not.toBeInTheDocument()
+
+    // A room deleted elsewhere leaves the list, and the circle shrinks with it.
+    await wrapper.setProps({ rooms: [room(1, SAME_SPOT), room(3, SAME_SPOT)] })
+    expect(screen.getByRole('button', { name: '2 chatrooms' })).toHaveTextContent('2')
+    expect(screen.queryByRole('button', { name: '3 chatrooms' })).not.toBeInTheDocument()
+  })
+
   it('turns a circle back into pins once its rooms no longer overlap', async () => {
     const { wrapper } = await renderMap([room(1, SAME_SPOT), room(2, SAME_SPOT)])
     unmount = () => wrapper.unmount()

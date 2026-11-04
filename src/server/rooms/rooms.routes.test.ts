@@ -397,6 +397,34 @@ describe('rooms API', () => {
       expect(announcedDeletions).toEqual([])
     })
 
+    // The other order: the delete holds the room's lock, as its transaction does, and a message
+    // arrives meanwhile. Its foreign-key check waits for the lock, then finds no room.
+    it('makes a message that waited for a delete to finish fail with 404, storing nothing (I8)', async () => {
+      const { id } = await createdRoom()
+
+      await testApp.db.connection().execute(async (deleter) => {
+        await sql`START TRANSACTION`.execute(deleter)
+        try {
+          await sql`SELECT id FROM rooms WHERE id = ${id} FOR UPDATE`.execute(deleter)
+          const sending = postMessage(id)
+          await expect.poll(() => waitingQueries(testApp.db)).toBeGreaterThan(0)
+          await sql`DELETE FROM rooms WHERE id = ${id}`.execute(deleter)
+
+          await sql`COMMIT`.execute(deleter)
+
+          const response = await sending
+          expect(response.statusCode).toBe(404)
+          expect(response.json()).toMatchObject({ code: 'ROOM_NOT_FOUND' })
+        } finally {
+          await sql`ROLLBACK`.execute(deleter)
+        }
+      })
+      const { rows } = await sql<{ total: number }>`
+        SELECT COUNT(*) AS total FROM messages
+      `.execute(testApp.db)
+      expect(Number(rows[0]?.total)).toBe(0)
+    })
+
     it('makes a message sent to a deleted room fail with 404', async () => {
       const { id, ownerToken } = await createdRoom()
       await deleteRoom(id, `Bearer ${ownerToken}`)

@@ -106,6 +106,9 @@ test.describe('real time (FR-6)', () => {
     await expect(secondPage.getByRole('heading', { name: 'Picnic' })).toBeVisible({
       timeout: 1_000,
     })
+    await expect(secondPage.getByRole('complementary', { name: 'Chat' })).toContainText(
+      'Chatroom 1',
+    )
     await expect(secondPage.getByTitle('Picnic')).toBeVisible()
   })
 
