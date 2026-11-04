@@ -10,8 +10,11 @@ import { pinIcon } from './pinIcon.ts'
 const ACTIVE_CLASS = 'room-pin--active'
 /** Pins closer than this on screen, in pixels, merge into one counted circle. */
 const CLUSTER_RADIUS_PX = 40
-/** Pins drawn on their own closer than this, in pixels, would sit on one another: they fan out. */
-const SAME_SPOT_PX = 24
+/**
+ * Pins drawn on their own closer than this, in pixels, would mostly hide one another, so they fan
+ * out. A pin is 25 px wide: pins further apart each keep more than half of it in view, and stay.
+ */
+const SAME_SPOT_PX = 12
 /** The margin left around a circle's rooms once the map has zoomed in on them, in pixels. */
 const ZOOM_PADDING_PX = 64
 /** The least room, in pixels, that keeping clear of the panel may leave for a circle's rooms. */
@@ -146,7 +149,11 @@ export function useRoomMarkers(
     for (const spot of spots) {
       if (spot.rooms.length < 2) continue
       const offsets = fanOut(spot.rooms.length)
-      spot.rooms.forEach((room, index) => {
+      // In the order the pins stand, left to right, so a room made beside a pin keeps to its side.
+      const inOrder = spot.rooms
+        .map((room) => ({ room, point: instance.project(shown(room, centreLng), zoom) }))
+        .sort((a, b) => a.point.x - b.point.x || a.point.y - b.point.y || a.room.id - b.room.id)
+      inOrder.forEach(({ room }, index) => {
         const { x, y } = offsets[index] ?? { x: 0, y: 0 }
         const point = L.point(spot.center.x + x, spot.center.y + y)
         positions.set(room.id, instance.unproject(point, zoom))

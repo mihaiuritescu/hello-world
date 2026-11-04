@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { seedMessages, seedRoomsAt } from './database.ts'
 import { expect, test } from './fixtures.ts'
 import { below, overlap } from './layout.ts'
@@ -29,6 +29,12 @@ const WESTERN_PAIR = [
 
 function pin(page: Page, id: number) {
   return page.getByTitle(`Chatroom ${id}`)
+}
+
+async function boxOf(element: Locator) {
+  const box = await element.boundingBox()
+  if (!box) throw new Error('The element must be drawn')
+  return box
 }
 
 function zoomLevel(page: Page) {
@@ -212,6 +218,19 @@ test.describe('pin clusters (FR-7)', () => {
     await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
     await pin(page, 2).click()
     await expect(page.getByRole('heading', { name: 'Chatroom 2' })).toBeVisible()
+  })
+
+  test('a room made right beside a pin keeps to the side it was made on', async ({ page }) => {
+    await seedRoomsAt([CLUJ[0] ?? { lat: 0, lng: 0 }])
+    await page.goto('/')
+    const first = await boxOf(pin(page, 1))
+
+    // 15 px left of the pin's tip and 10 px up, just clear of its image.
+    await page.mouse.click(first.x + 12 - 15, first.y + first.height - 10)
+
+    await expect(page.getByRole('heading', { name: 'Chatroom 2' })).toBeVisible()
+    const [made, old] = await Promise.all([boxOf(pin(page, 2)), boxOf(pin(page, 1))])
+    expect(made.x).toBeLessThan(old.x)
   })
 
   test("a room at the open room's spot keeps a pin of its own that opens it", async ({ page }) => {
