@@ -455,6 +455,25 @@ describe('online count', () => {
     await expect.poll(() => watcher.heard[0]).toEqual({ online: 2 })
   })
 
+  it("frees a connection's socket for the next one once it leaves", async () => {
+    const port = await listening(10)
+    const watcher = await join(port)
+    const raw = await openRawSocketIo(port)
+    onTestFinished(() => raw.close())
+
+    raw.send(['40'])
+    await expect.poll(() => watcher.heard.at(-1)).toEqual({ online: 2 })
+    raw.send(['41'])
+    // The server handles a DISCONNECT on its next tick; a CONNECT before that closes the connection.
+    await expect.poll(() => watcher.heard.at(-1)).toEqual({ online: 1 })
+    raw.send(['40'])
+
+    await expect
+      .poll(() => raw.received.filter((packet) => packet.startsWith('40')))
+      .toHaveLength(2)
+    expect(raw.received.filter((packet) => packet.startsWith('44'))).toEqual([])
+  })
+
   it('sends everyone at most two counts while many windows open at once', async () => {
     const port = await listening()
     const watcher = await join(port)
