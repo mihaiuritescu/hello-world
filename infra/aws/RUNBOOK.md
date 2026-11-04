@@ -290,13 +290,16 @@ A stack created from this template already has both, so for one of those, start 
 
 ### Release
 
-Pick the next version: `v`, a digit and the rest of the number, such as `v1.1.1` after `v1.1.0`. CI deploys only tags that start with `v` and a digit. Then tag a commit on `main` and push the tag:
+Push `main` first. Then fill in the next version on the block's first line, and run the block. A version is `v`, a digit and the rest of the number, such as `v1.1.1` after `v1.1.0`: CI deploys only tags that start with `v` and a digit.
 
 ```bash
-export VERSION=v1.2.3                   # the next version
-git tag -a "$VERSION" -m "$VERSION"
-git push origin "$VERSION"
+VERSION=                                # the next version, such as v1.1.1
+git fetch origin main &&
+  git tag -a "$VERSION" -m "$VERSION" origin/main &&
+  git push origin "refs/tags/$VERSION"
 ```
+
+The block tags the tip of `main` on GitHub, whatever is checked out, so only pushed commits can deploy. While the version is empty, `git tag` stops with `fatal: '' is not a valid tag name`, and nothing is pushed. To release an older commit of `main`, put its SHA in place of `origin/main`.
 
 Only a person pushes tags, because a tag deploys with no approval step. Claude Code's git guard blocks the tag pushes it recognises: a net for mistakes, not a lock against an agent set on deploying.
 

@@ -19,6 +19,16 @@ function templateParameters(): string[] {
   return templateNames('Parameters', 'Conditions')
 }
 
+/** The commands of the runbook's Release section, which a person pastes to deploy. */
+function releaseCommands(): string {
+  const runbook = read('infra/aws/RUNBOOK.md')
+  const section = runbook.slice(
+    runbook.indexOf('\n### Release\n'),
+    runbook.indexOf('\n### Roll back\n'),
+  )
+  return /```bash\n([^`]*)```/.exec(section)?.[1] ?? ''
+}
+
 describe('the AWS runbook', () => {
   it('keeps every parameter of the stack when it updates the stack', () => {
     const runbook = read('infra/aws/RUNBOOK.md')
@@ -35,5 +45,19 @@ describe('the AWS runbook', () => {
     const rows = /Expect (\d+) rows, all `Add`/.exec(read('infra/aws/RUNBOOK.md'))?.[1]
 
     expect(Number(rows)).toBe(templateNames('Resources', 'Outputs').length)
+  })
+
+  // A pushed version tag deploys with no approval step, so a paste nobody edited must stop.
+  it('pushes no release tag until the version is filled in', () => {
+    const release = releaseCommands()
+
+    expect(release).toMatch(/^VERSION= +#/m)
+    expect(release).toMatch(/git tag [^\n]*&&\n\s*git push /)
+  })
+
+  it('tags the tip of main on GitHub, whatever is checked out', () => {
+    expect(releaseCommands()).toMatch(
+      /git fetch origin main &&\n\s*git tag -a "\$VERSION" -m "\$VERSION" origin\/main &&/,
+    )
   })
 })
