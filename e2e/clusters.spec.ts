@@ -220,6 +220,31 @@ test.describe('pin clusters (FR-7)', () => {
     await expect(page.getByRole('heading', { name: 'Chatroom 2' })).toBeVisible()
   })
 
+  test('a fanned-out pin goes back to its own place once zooming in separates it', async ({
+    page,
+  }) => {
+    // At the view's centre, and about 1 km east: 0.3 px apart at the opening zoom, so they fan
+    // out, and 19 px at zoom 11, where each pin stands on its own.
+    await seedRoomsAt([
+      { lat: 47, lng: 20 },
+      { lat: 47, lng: 20.0132 },
+    ])
+    await page.goto('/?room=1')
+    await expect(pin(page, 1)).toHaveClass(/room-pin--active/)
+
+    // The zoom buttons zoom around the centre. Each click waits for the last zoom to settle.
+    for (const level of ['6', '7', '8', '9', '10', '11']) {
+      await page.getByRole('button', { name: 'Zoom in' }).click()
+      await expect(zoomLevel(page)).toHaveAttribute('data-zoom', level)
+      await expect(page.locator('.leaflet-zoom-anim')).toHaveCount(0)
+    }
+
+    const [one, two] = await Promise.all([boxOf(pin(page, 1)), boxOf(pin(page, 2))])
+    expect(two.x - one.x).toBeGreaterThan(15)
+    expect(two.x - one.x).toBeLessThan(24)
+    expect(Math.abs(two.y - one.y)).toBeLessThan(2)
+  })
+
   test('a room made right beside a pin keeps to the side it was made on', async ({ page }) => {
     await seedRoomsAt([CLUJ[0] ?? { lat: 0, lng: 0 }])
     await page.goto('/')
