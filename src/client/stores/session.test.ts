@@ -19,14 +19,21 @@ describe('session store', () => {
     expect(useSessionStore().selectedRoomId).toBe(7)
   })
 
-  it.each(['?room=abc', '?room=0', '?room=-3', '?room=1.5', ''])(
-    'treats %j as no open room',
-    (search) => {
-      openPage(search)
+  it.each([
+    '?room=abc',
+    '?room=0',
+    '?room=-3',
+    '?room=1.5',
+    '?room=01',
+    '?room=0x1',
+    '?room=1e0',
+    '?room=9007199254740993',
+    '',
+  ])('treats %j as no open room', (search) => {
+    openPage(search)
 
-      expect(useSessionStore().selectedRoomId).toBeNull()
-    },
-  )
+    expect(useSessionStore().selectedRoomId).toBeNull()
+  })
 
   it('writes the selected room to the URL, replacing the history entry', async () => {
     openPage('')

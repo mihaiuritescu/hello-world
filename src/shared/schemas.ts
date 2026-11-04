@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { LIMITS } from './domain.ts'
+import { parseRoomId } from './roomId.ts'
 import { textProblem } from './text.ts'
 
 /** A point on the map. Clients send wrapped longitudes, so both ranges are strict. */
@@ -9,16 +10,14 @@ export const CoordinatesSchema = z.object({
 })
 export type Coordinates = z.infer<typeof CoordinatesSchema>
 
-/**
- * The `:roomId` route parameter: a positive integer that fits in a JavaScript number, written
- * plainly. Forms such as `0x1`, `1e0` or `01` would give one room several URLs.
- */
+/** The `:roomId` route parameter, read by the same rule as the browser's `?room=` (roomId.ts). */
 export const RoomIdParamsSchema = z.object({
-  roomId: z
-    .string()
-    .regex(/^[1-9]\d*$/, 'Expected a positive whole number')
-    .transform(Number)
-    .pipe(z.number().max(Number.MAX_SAFE_INTEGER)),
+  roomId: z.string().transform((text, context) => {
+    const id = parseRoomId(text)
+    if (id !== null) return id
+    context.addIssue('Expected a positive whole number')
+    return z.NEVER
+  }),
 })
 
 /** A client's request to follow one room's messages over the socket (`room:subscribe`). */
