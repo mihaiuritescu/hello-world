@@ -10,8 +10,8 @@ const realtime = useRealtimeStore()
   <v-toolbar tag="header" class="app-header" density="comfortable" color="surface" border="b" flat>
     <v-icon :icon="mdiEarth" color="primary" class="app-header__logo" />
     <div class="app-header__titles">
-      <h1 class="text-h6">Hello World</h1>
-      <p class="text-body-2 text-medium-emphasis d-none d-sm-block">
+      <h1 class="text-title-large font-weight-bold">Hello World</h1>
+      <p class="text-body-medium text-medium-emphasis d-none d-sm-block">
         Drop a pin anywhere on the map and chat with whoever joins you.
       </p>
     </div>
@@ -35,9 +35,10 @@ const realtime = useRealtimeStore()
   margin-inline: 12px;
 }
 
+/* Vuetify 4 keeps the browser's margins on headings and paragraphs, which wouldn't fit the bar. */
 .app-header__titles > * {
+  margin: 0;
   overflow: hidden;
-  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
