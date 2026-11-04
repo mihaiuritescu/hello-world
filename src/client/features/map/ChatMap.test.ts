@@ -4,11 +4,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import ChatMap from './ChatMap.vue'
 
-// jsdom has no layout, so these tests only cover keyboard input and which pins exist. Clicks,
-// drags and where pins sit are covered by the Playwright tests.
-async function renderMap(rooms: Room[] = []) {
+// jsdom has no layout, so these tests only cover keyboard input and which pins and circles exist.
+// Clicks, drags, zooming and where markers sit are covered by the Playwright tests.
+async function renderMap(rooms: Room[] = [], selectedRoomId: number | null = null) {
   const wrapper = mount(ChatMap, {
-    props: { rooms, selectedRoomId: null },
+    props: { rooms, selectedRoomId },
     attachTo: document.body,
   })
   // The keyboard listener is attached once the template ref is set, one tick after mounting.
@@ -66,9 +66,44 @@ describe('ChatMap pins', () => {
     unmount()
   })
 
-  function room(id: number): Room {
-    return { id, lat: 45 + id, lng: 20, createdAt: '2026-11-02T10:00:00.000Z' }
+  /** A room 5° of latitude from the next one: far enough apart that their pins never merge. */
+  function room(id: number, at = { lat: 40 + id * 5, lng: 20 }): Room {
+    return { id, ...at, createdAt: '2026-11-02T10:00:00.000Z' }
   }
+
+  const SAME_SPOT = { lat: 47, lng: 20 }
+
+  it('draws rooms whose pins would overlap as one circle with their count', async () => {
+    const { wrapper } = await renderMap([room(1, SAME_SPOT), room(2, SAME_SPOT)])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    expect(screen.getByRole('button', { name: '2 chatrooms' })).toHaveTextContent('2')
+    expect(screen.queryByTitle('Chatroom 1')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Chatroom 2')).not.toBeInTheDocument()
+  })
+
+  it('never folds the open room into a circle', async () => {
+    const rooms = [room(1, SAME_SPOT), room(2, SAME_SPOT), room(3, SAME_SPOT)]
+    const { wrapper } = await renderMap(rooms, 2)
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    expect(screen.getByTitle('Chatroom 2')).toHaveClass('room-pin--active')
+    expect(screen.getByRole('button', { name: '2 chatrooms' })).toBeInTheDocument()
+  })
+
+  it('turns a circle back into pins once its rooms no longer overlap', async () => {
+    const { wrapper } = await renderMap([room(1, SAME_SPOT), room(2, SAME_SPOT)])
+    unmount = () => wrapper.unmount()
+    const screen = within(document.body)
+
+    await wrapper.setProps({ rooms: [room(1, SAME_SPOT), room(2)] })
+
+    expect(screen.queryByRole('button', { name: '2 chatrooms' })).not.toBeInTheDocument()
+    expect(screen.getByTitle('Chatroom 1')).toBeInTheDocument()
+    expect(screen.getByTitle('Chatroom 2')).toBeInTheDocument()
+  })
 
   it('swaps the pins when the list keeps its length but changes its rooms', async () => {
     const { wrapper } = await renderMap([room(1), room(2)])

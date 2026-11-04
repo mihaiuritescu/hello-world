@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { seedMessages, seedRooms } from './database.ts'
+import { seedMessages, seedRooms, seedRoomsAt } from './database.ts'
 import { expect, test } from './fixtures.ts'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -18,6 +18,21 @@ test.describe('accessibility', () => {
     await page.goto('/')
     await page.locator('.leaflet-container').click({ position: { x: 250, y: 360 } })
     await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+
+    expect(results.violations).toEqual([])
+  })
+
+  test('a map with a circle of grouped pins has no detectable WCAG violations', async ({
+    page,
+  }) => {
+    await seedRoomsAt([
+      { lat: 46.77, lng: 23.59 },
+      { lat: 46.78, lng: 23.6 },
+    ])
+    await page.goto('/')
+    await expect(page.getByRole('button', { name: '2 chatrooms' })).toBeVisible()
 
     const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
 

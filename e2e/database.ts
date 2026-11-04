@@ -22,6 +22,17 @@ export async function seedRooms(count: number): Promise<void> {
   }
 }
 
+/** Inserts one room at each point, in order, in a single statement. */
+export async function seedRoomsAt(points: { lat: number; lng: number }[]): Promise<void> {
+  const connection = await mysql.createConnection(connectionOptions)
+  try {
+    const rows = points.map(({ lat, lng }) => [lat, lng])
+    await connection.query('INSERT INTO rooms (lat, lng) VALUES ?', [rows])
+  } finally {
+    await connection.end()
+  }
+}
+
 /** Inserts `count` messages into a room, "Message 1" to "Message <count>", in one statement. */
 export async function seedMessages(roomId: number, count: number): Promise<void> {
   const connection = await mysql.createConnection(connectionOptions)

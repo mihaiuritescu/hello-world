@@ -22,3 +22,41 @@ body {
 .room-pin--active {
   filter: hue-rotate(150deg) saturate(1.6);
 }
+
+/*
+ * Rooms whose pins would overlap: a solid circle with their count, inside a soft halo that fades
+ * outwards. White on this blue passes WCAG AA for the small bold count.
+ */
+.room-cluster {
+  --room-cluster-blue: 21 101 192;
+
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--room-cluster-blue) / 0.45) 60%,
+    rgb(var(--room-cluster-blue) / 0.15)
+  );
+}
+
+.room-cluster:focus-visible {
+  outline: 3px solid rgb(var(--room-cluster-blue));
+  outline-offset: 2px;
+}
+
+.room-cluster__count {
+  display: grid;
+  place-items: center;
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  background: rgb(var(--room-cluster-blue));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  color: #fff;
+  font: 700 13px / 1 var(--app-font);
+}
+
+.room-cluster--large .room-cluster__count {
+  font-size: 12px;
+}

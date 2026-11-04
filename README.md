@@ -10,6 +10,7 @@ A real-time chat on a world map: click anywhere to drop a pin, open its chatroom
 
 - **Create a chatroom:** click anywhere on the map, or focus the map and press Enter to create one at its centre.
 - **Open a room:** click its pin, or focus the pin and press Enter. The open room's pin turns red, and the panel shows the room's latest 100 messages.
+- **Busy areas:** zoomed out, pins that would overlap merge into a circle that shows how many chatrooms it holds. Click it, or focus it and press Enter, to zoom in until its pins separate. The open room's pin always stays a pin.
 - **Post a message:** write your name and a message, then press Submit or Enter. The message field clears for the next one, and your name is remembered on this device.
 - **Send again safely:** if a send fails, your draft stays in the field. Sending it again never posts it twice.
 - **Live updates:** open the app in two windows. New pins, and new messages in the room you have open, show up in both within a second. The chip next to the room title says **Live**, or **Reconnecting…** while the app catches up; without a live connection, it refreshes every 10 seconds.
@@ -113,6 +114,7 @@ The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behin
 ## Beyond the brief
 
 - **Real time,** the brief's optional part: other windows see new pins and messages within a second, and catch up after a lost connection. A chip shows whether the connection is live.
+- **Pin clusters,** computed in the browser without a map plugin, keyboard-accessible like the pins.
 - **A header with a live online count,** sent at most once a second, so a wave of reconnects can't flood the clients.
 - **Duplicate-safe sending:** sending a failed message again never stores it twice.
 - **Deep links** (`?room=3`) and a remembered name.
