@@ -9,8 +9,6 @@ const OSM_ATTRIBUTION =
 export function createTileLayer(): L.TileLayer {
   return L.tileLayer(OSM_TILE_URL, {
     maxZoom: 19,
-    // The map shows one world (coordinates.ts), so the tiles don't repeat beyond it either.
-    noWrap: true,
     attribution: OSM_ATTRIBUTION,
     referrerPolicy: 'strict-origin-when-cross-origin',
   })

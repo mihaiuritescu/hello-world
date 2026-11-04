@@ -23,6 +23,8 @@ const MIN_FREE_PX = 120
  * merges. Nothing merges at the deepest zoom, where zooming in could no longer separate pins.
  * Pins that would still sit on one another, there or next to the open room's, fan out side by
  * side, so each one can be clicked; the rooms' coordinates stay as they are.
+ * The map pans past the date line freely, and Leaflet draws a marker on one copy of the world
+ * only, so every marker goes on the copy nearest the view's centre: the one in view.
  * `cover` is what floats over the map, the chat panel: zooming in keeps rooms out from under it.
  */
 export function useRoomMarkers(
@@ -38,17 +40,20 @@ export function useRoomMarkers(
   /** The circles on the map, by their rooms' ids: an unchanged group keeps its marker, and focus. */
   const circles = new Map<string, L.Marker>()
   let activeId: number | null = null
-  let zoomWatched: L.Map | null = null
+  let watchedMap: L.Map | null = null
   /** The room whose marker takes the keyboard focus once a zoom into its circle settles. */
   let focusAfterZoom: number | null = null
 
   function sync(): void {
     const instance = map.value
     if (!instance) return
-    if (zoomWatched !== instance) {
+    if (watchedMap !== instance) {
       instance.on('zoomend', onZoomEnd)
-      zoomWatched = instance
+      // Once a pan settles, the markers move to the copy of the world now in view.
+      instance.on('moveend', () => sync())
+      watchedMap = instance
     }
+    const centreLng = instance.getCenter().lng
 
     // The store keeps only the newest rooms, so a room can leave the list.
     const listed = new Set(rooms.value.map((room) => room.id))
@@ -60,15 +65,16 @@ export function useRoomMarkers(
 
     const drawnPins = new Set<number>()
     const drawnCircles = new Set<string>()
-    const groups = groupsAt(instance)
+    const groups = groupsAt(instance, centreLng)
     const fanned = fannedPositions(
       instance,
       groups.flatMap((group) => (group.rooms.length === 1 ? group.rooms : [])),
+      centreLng,
     )
     for (const group of groups) {
       const [first, second] = group.rooms
       if (first && !second) {
-        drawPin(instance, first, fanned.get(first.id))
+        drawPin(instance, first, fanned.get(first.id) ?? shown(first, centreLng))
         drawnPins.add(first.id)
       } else {
         drawnCircles.add(drawCircle(instance, group))
@@ -105,12 +111,17 @@ export function useRoomMarkers(
     return undefined
   }
 
-  function groupsAt(instance: L.Map): RoomGroup[] {
+  /** A room's position on the copy of the world nearest `centreLng`, the view's centre. */
+  function shown(room: Room, centreLng: number): L.LatLng {
+    return L.latLng(room.lat, room.lng + 360 * Math.round((centreLng - room.lng) / 360))
+  }
+
+  function groupsAt(instance: L.Map, centreLng: number): RoomGroup[] {
     const zoom = instance.getZoom()
     const radius = zoom >= instance.getMaxZoom() ? 0 : CLUSTER_RADIUS_PX
     return clusterRooms(
       rooms.value,
-      (room) => instance.project([room.lat, room.lng], zoom),
+      (room) => instance.project(shown(room, centreLng), zoom),
       radius,
       selectedRoomId.value,
     )
@@ -118,14 +129,18 @@ export function useRoomMarkers(
 
   /**
    * Where to draw the pins, of `alone`, that would sit on one another: fanned out around their
-   * spot. A pin missing from the result goes at its room's own coordinates.
+   * spot. A pin missing from the result goes at its room's own place.
    */
-  function fannedPositions(instance: L.Map, alone: readonly Room[]): Map<number, L.LatLng> {
+  function fannedPositions(
+    instance: L.Map,
+    alone: readonly Room[],
+    centreLng: number,
+  ): Map<number, L.LatLng> {
     const zoom = instance.getZoom()
     const positions = new Map<number, L.LatLng>()
     const spots = clusterRooms(
       alone,
-      (room) => instance.project([room.lat, room.lng], zoom),
+      (room) => instance.project(shown(room, centreLng), zoom),
       SAME_SPOT_PX,
     )
     for (const spot of spots) {
@@ -140,11 +155,12 @@ export function useRoomMarkers(
     return positions
   }
 
-  function drawPin(instance: L.Map, room: Room, at = L.latLng(room.lat, room.lng)): void {
+  function drawPin(instance: L.Map, room: Room, at: L.LatLng): void {
     let pin = pins.get(room.id)
     if (pin) {
       setTitle(pin, roomLabel(room))
-      // A pin fanned out at one zoom goes back to its room's own place at the next.
+      // A pin moves when it fans out or comes back, and to follow the map to another copy of the
+      // world. Moving keeps its element, so its focus and highlight stay.
       if (!pin.getLatLng().equals(at)) pin.setLatLng(at)
     } else {
       pin = createPin(room, at)
@@ -183,10 +199,15 @@ export function useRoomMarkers(
   /** Puts a group's circle on the map, or keeps the one already there, and returns its key. */
   function drawCircle(instance: L.Map, group: RoomGroup): string {
     const key = group.rooms.map((room) => room.id).join(',')
-    if (circles.has(key)) return key
-
-    // The same rooms always average to the same place, whatever the zoom they're grouped at.
+    // The same rooms average to the same place at any zoom, on the copy of the world in view.
     const center = instance.unproject(L.point(group.center.x, group.center.y), instance.getZoom())
+    const kept = circles.get(key)
+    if (kept) {
+      // The same rooms keep their marker, and its focus, when they move to another copy.
+      if (!kept.getLatLng().equals(center)) kept.setLatLng(center)
+      return key
+    }
+
     const count = group.rooms.length
     const circle = L.marker(center, {
       icon: clusterIcon(count),
@@ -214,7 +235,8 @@ export function useRoomMarkers(
    * where nothing merges and their pins fan out.
    */
   function zoomTo(instance: L.Map, groupRooms: readonly Room[]): void {
-    const bounds = L.latLngBounds(groupRooms.map((room) => L.latLng(room.lat, room.lng)))
+    const centreLng = instance.getCenter().lng
+    const bounds = L.latLngBounds(groupRooms.map((room) => shown(room, centreLng)))
     const { topLeft, bottomRight } = freeAreaPadding(instance)
     const fitting = instance.getBoundsZoom(bounds, false, topLeft.add(bottomRight))
     const zoom = Math.min(

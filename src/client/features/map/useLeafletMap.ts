@@ -2,7 +2,7 @@ import type { Coordinates } from '#shared/schemas.ts'
 import { useEventListener, useResizeObserver } from '@vueuse/core'
 import L from 'leaflet'
 import { markRaw, onBeforeUnmount, onMounted, ref, shallowRef, type ShallowRef } from 'vue'
-import { DRAWABLE_WORLD, toRoomCoordinates } from './coordinates.ts'
+import { toRoomCoordinates } from './coordinates.ts'
 import { createTileLayer } from './tiles.ts'
 
 /** The opening view: Europe, as in the mockups. */
@@ -32,9 +32,9 @@ export function useLeafletMap(
         center: INITIAL_CENTER,
         zoom: INITIAL_ZOOM,
         minZoom: 3,
-        // One world, which panning stops at: every pin is drawn where its room is.
-        maxBounds: DRAWABLE_WORLD,
-        maxBoundsViscosity: 1,
+        // The map pans freely past the date line, and the tiles repeat the world. Pins follow on
+        // the copy of the world in view (useRoomMarkers.ts), so no jump back to the first copy
+        // (worldCopyJump) is needed: mid-drag, it would leave the pins a world behind.
         // Rooms are created on click, and a double-click would also zoom.
         doubleClickZoom: false,
       }),

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
-import { seedRooms } from './database.ts'
+import { seedMessages, seedRooms, seedRoomsAt } from './database.ts'
 import { expect, test } from './fixtures.ts'
+import { overlap } from './layout.ts'
 
 // Points on the left of the default 1280×720 viewport, clear of the chat panel on the right.
 const WEST = { x: 250, y: 360 }
@@ -18,6 +19,23 @@ async function mapBox(page: Page) {
   const box = await map(page).boundingBox()
   if (!box) throw new Error('The map must be rendered')
   return box
+}
+
+/**
+ * Zooms out as far as the map goes, to zoom 3, where a world is 2,048 px wide. Then it drags the
+ * map about 80° east, so that the view's east edge ends past the date line. The drag is one step,
+ * so that the map doesn't glide on after it.
+ */
+async function zoomOutAndDragEast(page: Page, box: Awaited<ReturnType<typeof mapBox>>) {
+  await page.mouse.move(box.x + WEST.x, box.y + WEST.y)
+  await page.mouse.wheel(0, 2000)
+  await expect(page.getByRole('region', { name: 'World map' })).toHaveAttribute('data-zoom', '3')
+  // Leaflet ignores a drag that starts while a zoom is still under way.
+  await expect(page.locator('.leaflet-zoom-anim')).toHaveCount(0)
+  await page.mouse.move(box.x + 900, box.y + 400)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 450, box.y + 400)
+  await page.mouse.up()
 }
 
 /** Holds the next `POST /api/rooms` until the returned function is called. */
@@ -136,23 +154,49 @@ test.describe('rooms (FR-2, FR-3, FR-5)', () => {
   }) => {
     await page.goto('/')
     const box = await mapBox(page)
-    // One long wheel turn zooms out as far as the map goes: zoom 3, where a world is 2,048 px wide.
-    await page.mouse.move(box.x + WEST.x, box.y + WEST.y)
-    await page.mouse.wheel(0, 2000)
-    await expect(page.getByRole('region', { name: 'World map' })).toHaveAttribute('data-zoom', '3')
-    // Leaflet ignores a drag that starts while a zoom is still under way.
-    await expect(page.locator('.leaflet-zoom-anim')).toHaveCount(0)
+    await zoomOutAndDragEast(page, box)
 
-    // East, across the date line, which a map of one world stops at. In one step, so the map
-    // doesn't glide on after the drag.
-    await page.mouse.move(box.x + 900, box.y + 400)
-    await page.mouse.down()
-    await page.mouse.move(box.x + 450, box.y + 400)
-    await page.mouse.up()
+    // Past the date line, where the view shows the next copy of the world.
     await map(page).click({ position: { x: box.width - 30, y: box.height - 80 } })
 
     await expect(heading(page, 'Chatroom 1')).toBeVisible()
     await expect(page.getByTitle('Chatroom 1')).toBeInViewport()
+  })
+
+  test('a room in the far east can be dragged clear of a tall chat panel', async ({ page }) => {
+    // Tokyo, and an open room whose messages make the panel reach down the map.
+    await seedRoomsAt([
+      { lat: 35.68, lng: 139.69 },
+      { lat: 47, lng: 20 },
+    ])
+    await seedMessages(2, 30)
+    await page.goto('/?room=2')
+    const box = await mapBox(page)
+
+    await zoomOutAndDragEast(page, box)
+
+    const tokyo = page.getByTitle('Chatroom 1')
+    expect(await overlap(tokyo, page.getByRole('complementary', { name: 'Chat' }))).toBe(false)
+    await tokyo.click()
+    await expect(heading(page, 'Chatroom 1')).toBeVisible()
+  })
+
+  test('asks only for tiles that exist, on a screen wider than the world', async ({ page }) => {
+    await page.setViewportSize({ width: 2600, height: 900 })
+    const columns: number[] = []
+    page.on('request', (request) => {
+      const column = /tile\.openstreetmap\.org\/3\/(-?\d+)\//.exec(request.url())?.[1]
+      if (column !== undefined) columns.push(Number(column))
+    })
+    await page.goto('/')
+    const box = await mapBox(page)
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, 2000)
+
+    // At zoom 3 the world is eight tiles wide, and this screen shows all of it and more.
+    await expect.poll(() => [0, 7].every((column) => columns.includes(column))).toBe(true)
+    expect(columns.filter((column) => column < 0 || column > 7)).toEqual([])
   })
 
   test('Enter on the focused map creates a room at its centre', async ({ page }) => {

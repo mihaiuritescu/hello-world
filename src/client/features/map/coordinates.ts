@@ -5,21 +5,12 @@ import type L from 'leaflet'
 const MAX_DRAWABLE_LATITUDE = 85.0511287798
 
 /**
- * The one world the map shows. Leaflet draws each pin on one copy of the world, so on a repeated
- * copy every pin would be missing, and a room made there would get its pin far out of view.
- */
-export const DRAWABLE_WORLD: L.LatLngBoundsLiteral = [
-  [-MAX_DRAWABLE_LATITUDE, -180],
-  [MAX_DRAWABLE_LATITUDE, 180],
-]
-
-/**
- * Plain coordinates for a room at `latlng`. Null for the grey area beyond the drawable world,
- * where a pin would be drawn somewhere else than where the user clicked: north and south of what
- * Web Mercator draws, and east and west of the world, which a screen wider than the world at the
- * lowest zoom leaves in view.
+ * Plain coordinates for a room at `latlng`, with the longitude wrapped into -180..180 after
+ * panning across the date line. Null for the grey area beyond the drawable world, where a pin
+ * would be drawn somewhere else than where the user clicked.
  */
 export function toRoomCoordinates(latlng: L.LatLng): Coordinates | null {
-  const { lat, lng } = latlng
-  return Math.abs(lat) > MAX_DRAWABLE_LATITUDE || Math.abs(lng) > 180 ? null : { lat, lng }
+  // wrap() adds floating-point noise (23.59 becomes 23.590000000000003), so wrap only when needed.
+  const { lat, lng } = Math.abs(latlng.lng) <= 180 ? latlng : latlng.wrap()
+  return Math.abs(lat) > MAX_DRAWABLE_LATITUDE ? null : { lat, lng }
 }
