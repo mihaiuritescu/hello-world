@@ -131,6 +131,30 @@ test.describe('rooms (FR-2, FR-3, FR-5)', () => {
     await expect(heading(page, 'Chatroom 1')).toBeVisible()
   })
 
+  test("a click by the map's eastern edge puts the new room's pin where it was clicked", async ({
+    page,
+  }) => {
+    await page.goto('/')
+    const box = await mapBox(page)
+    // One long wheel turn zooms out as far as the map goes: zoom 3, where a world is 2,048 px wide.
+    await page.mouse.move(box.x + WEST.x, box.y + WEST.y)
+    await page.mouse.wheel(0, 2000)
+    await expect(page.getByRole('region', { name: 'World map' })).toHaveAttribute('data-zoom', '3')
+    // Leaflet ignores a drag that starts while a zoom is still under way.
+    await expect(page.locator('.leaflet-zoom-anim')).toHaveCount(0)
+
+    // East, across the date line, which a map of one world stops at. In one step, so the map
+    // doesn't glide on after the drag.
+    await page.mouse.move(box.x + 900, box.y + 400)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 450, box.y + 400)
+    await page.mouse.up()
+    await map(page).click({ position: { x: box.width - 30, y: box.height - 80 } })
+
+    await expect(heading(page, 'Chatroom 1')).toBeVisible()
+    await expect(page.getByTitle('Chatroom 1')).toBeInViewport()
+  })
+
   test('Enter on the focused map creates a room at its centre', async ({ page }) => {
     await page.goto('/')
 
