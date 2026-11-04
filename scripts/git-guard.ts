@@ -1,12 +1,15 @@
 // Claude Code's PreToolUse hook for shell commands. It blocks the git commands that can destroy
 // work or published history, or run other commands past the permission rules, however they are
 // spelled. Permission rules only match the start of a command: a deny on "git push --force" can't
-// see "git push origin main --force", "--force-w" or "--f\orce". Exit code 2 blocks the call and
-// gives Claude the reason; a person can still run any of these by hand.
+// see "git push origin main --force", "--force-w" or "--f\orce". It also blocks tag pushes: a
+// version tag deploys the demo, so only a person pushes one. Exit code 2 blocks the call and gives
+// Claude the reason; a person can still run any of these by hand.
 //
 // It reads commands as plain words, so it's a safety net rather than a sandbox: a command hidden
-// in a double-quoted substitution gets through, and no shell guard stops a plain read such as
-// `cat .env`. GitHub's protection of main is the guard that nothing here can talk around.
+// in a double-quoted substitution gets through, no shell guard stops a plain read such as
+// `cat .env`, and it can't see git's push settings, such as `push.followTags` or a remote's push
+// refspecs, which can make a plain push send tags along. GitHub's protection of main is the guard that nothing here can
+// talk around.
 //
 // Usage (Claude Code runs it): node scripts/git-guard.ts < hook-input.json
 import { readFileSync } from 'node:fs'
@@ -29,6 +32,9 @@ const COMMAND_OPTIONS = [
 ]
 /** Long options that let `git push` rewrite or delete what's published. */
 const PUSH_DANGERS = ['force', 'force-with-lease', 'force-if-includes', 'mirror', 'delete', 'prune']
+/** Long options that make `git push` send tags along. */
+const TAG_OPTIONS = ['tags', 'follow-tags']
+const TAG_DEPLOYS = 'and a version tag deploys the demo'
 
 /** Why `commandLine` must not run, or null when it may. */
 export function blockedReason(commandLine: string): string | null {
@@ -154,11 +160,25 @@ function pushProblem(args: string[]): string | null {
   for (const arg of args) {
     if (longOption(arg, PUSH_DANGERS))
       return `git push ${arg} can rewrite or delete published history`
+    if (longOption(arg, TAG_OPTIONS)) return `git push ${arg} pushes tags, ${TAG_DEPLOYS}`
     // Short flags, alone or together: -f forces, -d deletes.
     if (shortOption(arg, 'fd')) return `git push ${arg} can force or delete a branch`
     if (/^[+:]/.test(arg)) return `the refspec ${arg} forces or deletes a branch`
+    if (namesTag(arg)) return `git push ${arg} pushes a tag, ${TAG_DEPLOYS}`
   }
   return null
+}
+
+/**
+ * Whether a push argument may name a tag: the `tag` keyword, or a refspec side that holds `tags/`
+ * (git finds `tags/v1` as `refs/tags/v1`), a `*` pattern (which can map any ref onto a tag), or a
+ * version name such as v1.2.3. CI deploys tags named v<digit>.
+ */
+function namesTag(arg: string): boolean {
+  if (arg === 'tag') return true
+  return arg
+    .split(':')
+    .some((side) => /tags\//i.test(side) || side.includes('*') || /^v\d/.test(side))
 }
 
 function isDryRun(args: string[]): boolean {

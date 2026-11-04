@@ -53,6 +53,22 @@ describe('git guard', () => {
     // Ignored files, such as .env, must never be committed.
     'git add -f .env',
     'git add --force .env',
+    // A version tag deploys the demo, so only a person pushes tags.
+    'git push --tags',
+    'git push origin --tags',
+    'git push --follow-tags origin main',
+    'git push origin v1.0.0',
+    'git push origin main v1.0.0-rc.1',
+    'git push origin tag v1.0.0',
+    'git push origin refs/tags/v1.0.0',
+    'git push origin HEAD:refs/tags/release',
+    'git push --tag',
+    'git push --follow origin main',
+    // git finds tags/v1.0.0 as refs/tags/v1.0.0, and patterns can map any ref onto a tag.
+    'git push origin tags/v1.0.0',
+    'git push origin "refs/*:refs/*"',
+    'git push origin "refs/heads/*:refs/*"',
+    'git push . HEAD:refs/heads/tags/v1.0.0',
   ])('blocks %j', (command) => {
     expect(blockedReason(command)).not.toBeNull()
   })
@@ -72,7 +88,9 @@ describe('git guard', () => {
     "git commit -q -F - << 'EOF'\nfix: a subject\n\ngit push --force stays blocked\nEOF",
     'echo git push --force',
     'grep -n "git reset --hard" README.md',
-    'git push --follow-tags origin main',
+    'git push --no-follow-tags origin main',
+    'git push origin feature/v2-maps',
+    'git tag -a v1.0.0 -m "v1.0.0"',
     'git push --dry-run origin main',
     'git rebase main',
     'git bisect start',
@@ -84,5 +102,9 @@ describe('git guard', () => {
 
   it('says why it blocks a command', () => {
     expect(blockedReason('git push origin main --force')).toMatch(/force/i)
+  })
+
+  it('says that a tag push would deploy', () => {
+    expect(blockedReason('git push origin v1.0.0')).toMatch(/deploys the demo/)
   })
 })
