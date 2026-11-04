@@ -23,8 +23,12 @@ echo "::add-mask::$token"
 if ! credentials=$(aws sts assume-role-with-web-identity --role-arn "$AWS_DEPLOY_ROLE_ARN" \
   --role-session-name "github-run-${GITHUB_RUN_ID:-local}" --web-identity-token "$token" \
   --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text); then
-  echo "Couldn't sign in as $AWS_DEPLOY_ROLE_ARN. Check that AWS_DEPLOY_ROLE_ARN matches the" \
-    "stack's DeployRoleArn output (a new stack gets a new role) and that the tag starts with v." >&2
+  # The token's subject is what the role's trust checks. Unlike the token, its claims aren't secret.
+  subject=$(jq --raw-input --raw-output 'split(".")[1] | gsub("-"; "+") | gsub("_"; "/")
+    | . + (("=" * ((4 - length % 4) % 4)) // "") | @base64d | fromjson | .sub' <<< "$token" || true)
+  echo "Couldn't sign in as $AWS_DEPLOY_ROLE_ARN with the subject $subject. Check that" \
+    "AWS_DEPLOY_ROLE_ARN matches the stack's DeployRoleArn output (a new stack gets a new role)," \
+    "and that the subject starts with repo:, then the stack's GitHubOidcRepository." >&2
   exit 1
 fi
 read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<< "$credentials"

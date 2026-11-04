@@ -75,14 +75,14 @@ The demo needs no domain. Its address, `3-125-55-249.nip.io`, is a name that nip
 | IAM role and instance profile | SSM through AWS's managed policy, the one secret and the one log group. The managed policy also reads any SSM parameter in the account, so the demo account keeps no secrets in Parameter Store |
 | CloudWatch log group | Seven days of container logs |
 | SSM document | Deploys one image of this repository's GHCR package, pinned by digest |
-| GitHub OpenID Connect provider and deploy role | Only GitHub Actions jobs that run for a version tag of this repository (`v` and a digit) can assume the role, and AWS checks the tag in GitHub's token. The role may read the stack's outputs, send the deploy document to the instance and read the commands' status. The document deploys any image of this repository's package |
+| GitHub OpenID Connect provider and deploy role | Only GitHub Actions jobs that run for a version tag (`v` and a digit) of this repository can assume the role. AWS checks the tag, and the repository's names and IDs, in GitHub's token. The role may read the stack's outputs, send the deploy document to the instance and read the commands' status. The document deploys any image of this repository's package |
 
 **Teardown:** deleting the stack deletes all of it, with no final snapshot and no backups kept. [The runbook](../infra/aws/RUNBOOK.md#teardown-about-10-minutes) gives the steps, inside a signed-in session.
 
 **Known limits of the demo:**
 - The app connects as the database's master user. Production would add a least-privilege database user.
 - The instance doesn't install OS updates by itself. Production would add automatic patching.
-- The deploy role's trust names the GitHub repository. So before the account or the repository is renamed, update or delete the stack.
+- The deploy role trusts the repository by its names and its GitHub IDs, which are never reused, so nobody who later takes the name can deploy. After a rename, deploys stop until the stack's `GitHubRepository` and `GitHubOidcRepository` are updated.
 
 ## Deploying
 

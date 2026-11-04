@@ -254,7 +254,7 @@ Once this is set up, pushing a version tag deploys it, with no AWS session on yo
 3. It runs step 7 with the new digest.
 4. A last job runs step 8.
 
-AWS checks the token itself: the role trusts only jobs that run for a tag of this repository named `v` and a digit, such as `v1.0.0`. The role may only:
+AWS checks the token itself: the role trusts only jobs that run for a tag named `v` and a digit, such as `v1.0.0`, of the repository that the stack's `GitHubOidcRepository` names. That parameter holds the owner and repository IDs as well as their names, and GitHub never reuses an ID. The role may only:
 - read the stack's outputs;
 - send the deploy document to the instance, which deploys any image of this repository's package;
 - read the status and output of commands, given their IDs.
@@ -324,13 +324,14 @@ aws cloudformation create-change-set --stack-name "$STACK" --change-set-name upd
                ParameterKey=DbEngineVersion,UsePreviousValue=true \
                ParameterKey=DbBackupRetentionDays,UsePreviousValue=true \
                ParameterKey=SiteAddress,UsePreviousValue=true \
-               ParameterKey=GitHubRepository,UsePreviousValue=true
+               ParameterKey=GitHubRepository,UsePreviousValue=true \
+               ParameterKey=GitHubOidcRepository,UsePreviousValue=true
 aws cloudformation wait change-set-create-complete --stack-name "$STACK" --change-set-name update
 aws cloudformation describe-change-set --stack-name "$STACK" --change-set-name update \
   --query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]' --output table
 ```
 
-Every parameter keeps the value the stack has. To change one, give it `ParameterValue=…` instead of `UsePreviousValue=true`.
+Every parameter keeps the value the stack has. To change one, give it `ParameterValue=…` instead of `UsePreviousValue=true`. A parameter that is new in the template has no previous value, and CloudFormation refuses `UsePreviousValue=true` for it: give it `ParameterValue=…` this once.
 
 `DeployDocument` shows `Conditional` whenever its content changes, as it does when the site address changes: through a new `SiteAddress`, or through a new default in the template while `SiteAddress` is empty. This `Conditional` is safe: the template sets `UpdateMethod: NewVersion`, so the document gets a new version in place. The instance keeps the old settings until the next deploy, so after the update, run `stack_outputs`, then step 7 with the `IMAGE_DIGEST` and `GIT_SHA` of the version that runs now (step 2 shows where to find them). For a new address, such as a domain that already points at the Elastic IP, Caddy then gets its certificate.
 

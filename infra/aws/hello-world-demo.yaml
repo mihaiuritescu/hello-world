@@ -41,8 +41,16 @@ Parameters:
     AllowedPattern: '^[a-z0-9-]+/[a-z0-9_-]+$'
     Description: >-
       The owner/name repository, in lower case, whose GHCR images deploys accept. Only that
-      repository's owner and workflows can push there, and only its version tags may run deploys
-      from GitHub Actions.
+      repository's owner and workflows can push there.
+  GitHubOidcRepository:
+    Type: String
+    Default: 'mihaiuritescu@69866646/hello-world@1439070538'
+    # No wildcards or colons: the deploy role's trust puts this into its subject patterns as is.
+    AllowedPattern: '^[A-Za-z0-9-]+(@[0-9]+)?/[A-Za-z0-9_.-]+(@[0-9]+)?$'
+    Description: >-
+      The repository as GitHub's OIDC tokens name it, the only one whose version tags may run
+      deploys. For a repository created after 2026-07-15 that's owner@owner-id/name@repo-id, with
+      the IDs from https://api.github.com/repos/OWNER/NAME; for an older one, owner/name.
 
 Conditions:
   HasSiteAddress: !Not [!Equals [!Ref SiteAddress, '']]
@@ -399,9 +407,11 @@ Resources:
       ClientIdList: [sts.amazonaws.com]
 
   # Only a job that runs for a version tag of this repository (v and a digit) can assume it:
-  # GitHub's token names the repository and the ref, and IAM checks both. The trust names the repository, so a renamed
-  # account or repository needs this stack updated or deleted first, before someone else can take
-  # the old name.
+  # GitHub's token names the repository and the ref, and IAM checks both. For a repository created
+  # after 2026-07-15, the token names it as OWNER@OWNER-ID/NAME@REPO-ID, and IDs are never reused,
+  # so nobody who later takes the name can deploy. Everything before the tag is literal: IAM's *
+  # also matches : and @, so a wildcard there would let another repository's free-text claims, such
+  # as an environment name, complete the pattern.
   GitHubDeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -420,16 +430,16 @@ Resources:
               # deploys, v and a digit, as in v1.0.0.
               StringLike:
                 'token.actions.githubusercontent.com:sub':
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v0*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v1*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v2*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v3*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v4*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v5*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v6*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v7*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v8*'
-                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v9*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v0*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v1*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v2*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v3*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v4*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v5*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v6*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v7*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v8*'
+                  - !Sub 'repo:${GitHubOidcRepository}:ref:refs/tags/v9*'
       Policies:
         - PolicyName: deploy
           PolicyDocument:

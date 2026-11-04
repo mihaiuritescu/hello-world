@@ -27,7 +27,7 @@ describe('the AWS runbook', () => {
       ([, name]) => name ?? '',
     )
 
-    expect(templateParameters()).toHaveLength(6)
+    expect(templateParameters()).toHaveLength(7)
     expect(kept.sort()).toEqual(templateParameters().sort())
   })
 
