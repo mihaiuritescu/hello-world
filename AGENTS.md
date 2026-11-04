@@ -4,8 +4,6 @@ Guidance for AI coding agents, and for humans, working on **Hello World**, a rea
 
 Read [`docs/PRD.md`](docs/PRD.md) first. It holds the requirements (FR-1 to FR-10) and the invariants (I1 to I8) referenced below.
 
-> Drafted on 2026-10-30, before the scaffold. The commands and the `.claude/` tooling arrive with slice S0.
-
 ## Commands
 
 | Task | Command |
