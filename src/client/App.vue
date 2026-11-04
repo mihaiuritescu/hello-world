@@ -2,6 +2,7 @@
 import type { Coordinates } from '#shared/schemas.ts'
 import { computed, onMounted, ref } from 'vue'
 import ChatPanel from './features/chat/ChatPanel.vue'
+import AppHeader from './features/header/AppHeader.vue'
 import ChatMap from './features/map/ChatMap.vue'
 import { isRateLimited } from './lib/http.ts'
 import { roomTitle } from './lib/roomTitle.ts'
@@ -73,31 +74,54 @@ function createRoomAt(coordinates: Coordinates): void {
 
 <template>
   <v-app>
-    <v-main>
-      <!-- The panel is a sibling of the map, never inside it, so its clicks never reach Leaflet. -->
-      <div class="map-shell">
-        <ChatMap
-          :rooms="rooms.list"
-          :selected-room-id="session.selectedRoomId"
-          @create-at="createRoomAt"
-          @select="openRoom"
-        />
-        <ChatPanel :room="selectedRoom" />
-      </div>
-      <v-snackbar
-        :model-value="errorMessage !== null"
-        color="error"
-        @update:model-value="errorMessage = null"
-      >
-        {{ errorMessage }}
-      </v-snackbar>
-    </v-main>
+    <!-- The header takes its own height, and the map fills the rest of the window below it. -->
+    <div class="app-shell">
+      <AppHeader />
+      <v-main class="app-main">
+        <!-- The panel is a sibling of the map, never inside it, so its clicks never reach Leaflet. -->
+        <div class="map-shell">
+          <ChatMap
+            :rooms="rooms.list"
+            :selected-room-id="session.selectedRoomId"
+            @create-at="createRoomAt"
+            @select="openRoom"
+          />
+          <ChatPanel :room="selectedRoom" />
+        </div>
+        <v-snackbar
+          :model-value="errorMessage !== null"
+          color="error"
+          @update:model-value="errorMessage = null"
+        >
+          {{ errorMessage }}
+        </v-snackbar>
+      </v-main>
+    </div>
   </v-app>
 </template>
 
 <style scoped>
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.app-header {
+  flex: none;
+}
+
+.app-main {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* A zero flex basis gives the shell a definite height, which the map's height: 100% needs. */
 .map-shell {
   position: relative;
-  height: 100dvh;
+  flex: 1 1 0;
+  min-height: 0;
 }
 </style>

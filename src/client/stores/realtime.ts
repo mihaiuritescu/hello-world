@@ -17,6 +17,11 @@ export const useRealtimeStore = defineStore('realtime', () => {
   const messages = useMessagesStore()
 
   const status = ref<ConnectionStatus>('connecting')
+  /**
+   * How many windows have the app open, as the server last said. Null until it says, and while
+   * disconnected: an old count would claim people are still here when nobody can tell.
+   */
+  const online = ref<number | null>(null)
   const started = ref(false)
   let socket: AppSocket | null = null
   /** The room the user has open: the one to follow, and to reload after a reconnect. */
@@ -60,6 +65,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
     // Announcements go through the same upserts as HTTP responses, which drop duplicates (I4).
     socket.on('room:created', rooms.upsert)
     socket.on('message:created', messages.upsert)
+    socket.on('presence:changed', (presence) => {
+      online.value = presence.online
+    })
     started.value = true
   }
 
@@ -73,6 +81,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   function onDisconnect(reason: string): void {
     status.value = 'reconnecting'
+    online.value = null
     // The next connection starts afresh, and subscribes to the open room again.
     refused.value = false
     // Socket.IO reconnects by itself, except after the server ended the session on purpose.
@@ -110,7 +119,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     if (answer === LATE && (await followed) && openRoomId === roomId) await messages.load(roomId)
   }
 
-  return { status, connect, openRoom }
+  return { status, online, connect, openRoom }
 })
 
 const LATE = 'late'

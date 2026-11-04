@@ -125,6 +125,18 @@ describe('realtime store', () => {
     expect(realtime.status).toBe('reconnecting')
   })
 
+  it('reports how many windows are open, and forgets the count while disconnected', async () => {
+    const realtime = await liveStore()
+    expect(realtime.online).toBeNull()
+
+    fake.receive('presence:changed', { online: 3 })
+    expect(realtime.online).toBe(3)
+
+    // A stale count would claim people are still here when nobody can tell.
+    fake.receive('disconnect', 'transport close')
+    expect(realtime.online).toBeNull()
+  })
+
   it('polls every 10 seconds while disconnected, and stops once live again', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const realtime = await liveStore()

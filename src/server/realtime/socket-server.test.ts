@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import type { Message } from '#shared/domain.ts'
-import Fastify from 'fastify'
+import Fastify, { type FastifyInstance } from 'fastify'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetDatabase } from '../test/reset-db.ts'
 import {
+  connectRecording,
   connectTo,
   nextEvent,
   openSilentWebSocket,
@@ -333,5 +334,73 @@ describe('real-time limits', () => {
       error: 'RATE_LIMITED',
     })
     expect(socket.connected).toBe(true)
+  })
+})
+
+describe('online count', () => {
+  let bare: FastifyInstance | undefined
+  const sockets: TestSocket[] = []
+
+  afterEach(async () => {
+    sockets.splice(0).forEach((socket) => socket.disconnect())
+    await bare?.close()
+    bare = undefined
+  })
+
+  /** A bare socket server on a free port, so only this test's clients count. */
+  async function listening(presenceIntervalMs?: number): Promise<number> {
+    bare = Fastify()
+    attachSocketServer(bare, {
+      publicHost: null,
+      trustedProxies: null,
+      socketsPerAddress: 100,
+      subscriptionsPerMinute: 60,
+      presenceIntervalMs,
+    })
+    await bare.listen({ host: '127.0.0.1', port: 0 })
+    return portOf(bare)
+  }
+
+  async function join(port: number) {
+    const client = await connectRecording(port, 'presence:changed')
+    sockets.push(client.socket)
+    return client
+  }
+
+  it('tells a new client at once how many windows are open, its own included', async () => {
+    // An interval this long would hold back any count that waited for the next broadcast.
+    const port = await listening(60_000)
+    const first = await join(port)
+    await expect.poll(() => first.heard[0]).toEqual({ online: 1 })
+
+    const second = await join(port)
+
+    await expect.poll(() => second.heard[0]).toEqual({ online: 2 })
+  })
+
+  it('tells every client when a window opens or closes', async () => {
+    const port = await listening(10)
+    const watcher = await join(port)
+    const opened = nextEvent(watcher.socket, 'presence:changed', ({ online }) => online === 2)
+    const other = await join(port)
+    expect(await opened).toEqual({ online: 2 })
+
+    const closed = nextEvent(watcher.socket, 'presence:changed', ({ online }) => online === 1)
+    other.socket.disconnect()
+
+    expect(await closed).toEqual({ online: 1 })
+  })
+
+  it('sends everyone at most two counts while many windows open at once', async () => {
+    const port = await listening()
+    const watcher = await join(port)
+
+    await Promise.all(Array.from({ length: 5 }, () => join(port)))
+    await expect.poll(() => watcher.heard.at(-1), { timeout: 3_000 }).toEqual({ online: 6 })
+
+    // The first change goes out at once and the rest together a second later, rather than one
+    // count to every client for each new window.
+    const burst = watcher.heard.filter(({ online }) => online > 1)
+    expect(burst.length).toBeLessThanOrEqual(2)
   })
 })

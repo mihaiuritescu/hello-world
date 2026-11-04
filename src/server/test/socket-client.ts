@@ -23,11 +23,36 @@ export async function connectTo(
     reconnection: false,
     ...options,
   })
-  await new Promise<void>((resolve, reject) => {
+  await whenConnected(socket)
+  return socket
+}
+
+/**
+ * Connects like `connectTo`, but records every `event` the socket receives from the very first,
+ * which can arrive right behind the connection itself.
+ */
+export async function connectRecording<E extends keyof ServerToClientEvents>(
+  port: number,
+  event: E,
+): Promise<{ socket: TestSocket; heard: Payload<E>[] }> {
+  const socket: TestSocket = io(`http://127.0.0.1:${port}`, {
+    transports: ['websocket'],
+    reconnection: false,
+    autoConnect: false,
+  })
+  const heard: Payload<E>[] = []
+  const name: string = event
+  untyped(socket).on(name, (payload: Payload<E>) => heard.push(payload))
+  socket.connect()
+  await whenConnected(socket)
+  return { socket, heard }
+}
+
+function whenConnected(socket: TestSocket): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     socket.once('connect', resolve)
     socket.once('connect_error', reject)
   })
-  return socket
 }
 
 /** Resolves with the next `event` the socket receives that `matches`. */

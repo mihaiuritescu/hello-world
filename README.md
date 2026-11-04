@@ -14,6 +14,7 @@ A real-time chat on a world map: click anywhere to drop a pin, open its chatroom
 - **Send again safely:** if a send fails, your draft stays in the field. Sending it again never posts it twice.
 - **Live updates:** open the app in two windows. New pins, and new messages in the room you have open, show up in both within a second. The chip next to the room title says **Live**, or **Reconnecting…** while the app catches up; without a live connection, it refreshes every 10 seconds.
 - **Share a room:** the open room is part of the URL (`?room=3`), so a link or a reload reopens it.
+- **See who's around:** the header shows how many windows have the app open, updated live. Each open window counts once.
 
 ## Quick start (only Docker needed)
 
@@ -77,7 +78,7 @@ Every setting has a working default for local runs, so no `.env` file is needed.
 
 ```
 browser ──HTTP──► Fastify: the built SPA and the REST API ──► MySQL 8.4
-        ◄──WS───  Socket.IO: room:created, message:created
+        ◄──WS───  Socket.IO: room:created, message:created, presence:changed
 ```
 
 - **One process, one origin.** One Node process serves the SPA, the REST API and the WebSocket, so there's no CORS, and one image runs everywhere.
@@ -112,6 +113,7 @@ The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behin
 ## Beyond the brief
 
 - **Real time,** the brief's optional part: other windows see new pins and messages within a second, and catch up after a lost connection. A chip shows whether the connection is live.
+- **A header with a live online count,** sent at most once a second, so a wave of reconnects can't flood the clients.
 - **Duplicate-safe sending:** sending a failed message again never stores it twice.
 - **Deep links** (`?room=3`) and a remembered name.
 - **Keyboard access:** Enter on the focused map creates a room, and Enter on a pin opens it. axe scans the main screens and the load errors in CI.

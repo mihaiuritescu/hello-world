@@ -50,7 +50,7 @@ An add-on to production, for when one instance is no longer enough:
 | ElastiCache Serverless for Valkey (100 MB minimum), as the Socket.IO adapter | 7.37 |
 | **Total** | **+60.75** (153.34 for production with HA) |
 
-The same step moves the rate limits to Valkey, adds AWS WAF in front of the load balancer, and serves the static files through CloudFront and S3. Sticky sessions aren't needed, because the client uses WebSockets only.
+The same step moves the rate limits to Valkey, adds AWS WAF in front of the load balancer, and serves the static files through CloudFront and S3. Sticky sessions aren't needed, because the client uses WebSockets only. The header's online count is per instance today: with two instances, `socket-server.ts` would sum the instances' counts through the shared adapter before announcing it.
 
 ## Architecture
 

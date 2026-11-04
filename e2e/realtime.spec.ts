@@ -115,3 +115,20 @@ test.describe('real time (FR-6)', () => {
     ).toBeVisible()
   })
 })
+
+test.describe('online count (FR-10)', () => {
+  test('the header counts the windows that have the app open, within 2 seconds', async ({
+    page,
+    secondPage,
+  }) => {
+    await page.goto('/')
+    const header = page.getByRole('banner')
+    await expect(header).toContainText('1 online')
+
+    await secondPage.goto('/')
+    await expect(header).toContainText('2 online', { timeout: 2_000 })
+
+    await secondPage.close()
+    await expect(header).toContainText('1 online', { timeout: 2_000 })
+  })
+})

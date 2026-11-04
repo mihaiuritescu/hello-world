@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures.ts'
 import { overlap } from './layout.ts'
 
-test.describe('start screen (FR-1)', () => {
+test.describe('start screen and header (FR-1, FR-10)', () => {
   test('shows the map, its controls and the start panel @smoke', async ({ page }) => {
     await page.goto('/')
 
@@ -15,6 +15,28 @@ test.describe('start screen (FR-1)', () => {
     await expect(page.getByRole('complementary', { name: 'Chat' })).toContainText(
       'Click on the map to start a chat',
     )
+  })
+
+  test('names the app, says what it does and counts who is online, in a header', async ({
+    page,
+  }) => {
+    await page.goto('/')
+
+    const header = page.getByRole('banner')
+    await expect(header.getByRole('heading', { level: 1, name: 'Hello World' })).toBeVisible()
+    await expect(header).toContainText(
+      'Drop a pin anywhere on the map and chat with whoever joins you.',
+    )
+    await expect(header).toContainText('1 online')
+  })
+
+  test('keeps the zoom controls clear of the header', async ({ page }) => {
+    await page.goto('/')
+
+    const header = page.getByRole('banner')
+    const zoomIn = page.getByRole('button', { name: 'Zoom in' })
+    await expect(zoomIn).toBeVisible()
+    expect(await overlap(header, zoomIn)).toBe(false)
   })
 
   test('keeps the map attribution clear of the chat panel', async ({ page }) => {

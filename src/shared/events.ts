@@ -4,12 +4,22 @@ import type { RoomSubscription } from './schemas.ts'
 /** The server's answer to `room:subscribe`. */
 export type SubscribeReply = { ok: true } | { ok: false; error: string }
 
-/** Facts the server announces, named `<entity>:<past tense>`, each after its write commits (I1). */
+/** How many windows have the app open: the server's live connections. */
+export interface Presence {
+  online: number
+}
+
+/**
+ * Facts the server announces, named `<entity>:<past tense>`: each write after it commits (I1),
+ * and the online count when it changes.
+ */
 export interface ServerToClientEvents {
   /** Sent to every client. */
   'room:created': (room: Room) => void
   /** Sent to the clients that have the message's room open. */
   'message:created': (message: Message) => void
+  /** Sent to a client as it connects, then to every client, at most once a second. */
+  'presence:changed': (presence: Presence) => void
 }
 
 /** Commands a client sends, named `<entity>:<verb>`. Writes never travel this way (I5). */

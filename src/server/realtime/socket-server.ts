@@ -8,6 +8,7 @@ import { Server, type Socket } from 'socket.io'
 import { clientAddress } from '../client-address.ts'
 import type { Broadcaster } from './broadcaster.ts'
 
+type AppServer = Server<ClientToServerEvents, ServerToClientEvents>
 type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>
 
 /** The parts of an Engine.IO connection, under each Socket.IO one, that this file uses. */
@@ -32,10 +33,14 @@ interface SocketServerOptions {
   socketsPerAddress: number
   /** Subscriptions one connection may send a minute. */
   subscriptionsPerMinute: number
+  /** The shortest gap between two online counts sent to every client. Tests change it. */
+  presenceIntervalMs?: number
 }
 
 const ROOM_CHANNEL_PREFIX = 'room:'
 const MINUTE_MS = 60_000
+/** Online counts reach every client at most this often. */
+const PRESENCE_INTERVAL_MS = 1_000
 /** Packets queued for one connection before it counts as stalled. */
 const MAX_BACKLOG = 500
 const RATE_LIMITED: SubscribeReply = { ok: false, error: 'RATE_LIMITED' }
@@ -52,7 +57,13 @@ function roomChannel(roomId: number): string {
  */
 export function attachSocketServer(
   app: FastifyInstance,
-  { publicHost, trustedProxies, socketsPerAddress, subscriptionsPerMinute }: SocketServerOptions,
+  {
+    publicHost,
+    trustedProxies,
+    socketsPerAddress,
+    subscriptionsPerMinute,
+    presenceIntervalMs = PRESENCE_INTERVAL_MS,
+  }: SocketServerOptions,
 ): Broadcaster {
   // Open connections per client address. Engine.IO answers WebSocket handshakes before Fastify
   // sees them, so the HTTP rate limits don't cover sockets. Past the cap, handshakes are refused:
@@ -89,7 +100,10 @@ export function attachSocketServer(
     connection.once('close', () => upgraded.delete(connection))
   })
 
+  const presence = trackPresence(io, presenceIntervalMs)
+
   io.on('connection', (socket) => {
+    presence.joined(socket)
     limitEvents(socket, subscriptionsPerMinute)
     // Both arguments come straight from the client: the answer may be missing, or not a function.
     socket.on('room:subscribe', (subscription: unknown, answer: unknown) => {
@@ -107,6 +121,7 @@ export function attachSocketServer(
   // the close handshake would hold the server open for ws's 30 s timeout, past the shutdown's
   // grace period, so the raw connections go too: to the client, that is still a lost connection.
   app.addHook('preClose', (done) => {
+    presence.stop()
     io.engine.close()
     for (const connection of upgraded) connection.destroy()
     done()
@@ -118,6 +133,51 @@ export function attachSocketServer(
     },
     messageCreated: (message) => {
       io.to(roomChannel(message.roomId)).emit('message:created', message)
+    },
+  }
+}
+
+/**
+ * Keeps clients told how many windows have the app open: a new client at once, and every client
+ * whenever the count changes. A change goes out straight away unless a count went out less than
+ * `intervalMs` ago; then the latest count follows when the interval ends. After a restart, when
+ * every client reconnects within seconds, that sends a handful of counts instead of one to each
+ * client per reconnect, which would also fill the queues that `closeWhenStalled` watches.
+ */
+function trackPresence(io: AppServer, intervalMs: number) {
+  let announced: number | null = null
+  let lastAnnouncedAt = -Infinity
+  let timer: NodeJS.Timeout | undefined
+  let stopped = false
+
+  const online = (): number => io.of('/').sockets.size
+
+  function announce(): void {
+    timer = undefined
+    const count = online()
+    if (count === announced) return
+    announced = count
+    lastAnnouncedAt = Date.now()
+    io.emit('presence:changed', { online: count })
+  }
+
+  // Socket.IO removes a socket from its namespace before 'disconnect' fires, so the count read
+  // when the timer ends never includes a client that has left.
+  function changed(): void {
+    if (stopped || timer) return
+    timer = setTimeout(announce, Math.max(0, lastAnnouncedAt + intervalMs - Date.now()))
+  }
+
+  return {
+    joined(socket: ClientSocket): void {
+      socket.emit('presence:changed', { online: online() })
+      socket.on('disconnect', changed)
+      changed()
+    },
+    /** Sends nothing more: shutdown disconnects every client, and each would schedule a count. */
+    stop(): void {
+      stopped = true
+      clearTimeout(timer)
     },
   }
 }
