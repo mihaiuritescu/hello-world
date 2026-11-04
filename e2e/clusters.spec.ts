@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { seedMessages, seedRoomsAt } from './database.ts'
 import { expect, test } from './fixtures.ts'
-import { overlap } from './layout.ts'
+import { below, overlap } from './layout.ts'
 
 // Three rooms in Cluj, about a kilometre apart: one spot at the opening zoom.
 const CLUJ = [
@@ -100,6 +100,27 @@ test.describe('pin clusters (FR-7)', () => {
     for (const id of [1, 2]) {
       await expect(pin(page, id)).toBeVisible()
       expect(await overlap(pin(page, id), panel)).toBe(false)
+    }
+  })
+
+  test('on a phone, zooming in on a circle keeps its rooms below the chat panel', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    // North to south, about 22 kilometres apart. The panel spans the map's width on a phone, so
+    // centred on the whole map once zoomed in, the northern pin would reach under it.
+    await seedRoomsAt([
+      { lat: 46.87, lng: 23.59 },
+      { lat: 46.67, lng: 23.59 },
+    ])
+    await page.goto('/')
+
+    await page.getByRole('button', { name: '2 chatrooms' }).click()
+
+    const panel = page.getByRole('complementary', { name: 'Chat' })
+    for (const id of [1, 2]) {
+      await expect(pin(page, id)).toBeInViewport({ ratio: 1 })
+      expect(await below(pin(page, id), panel)).toBe(true)
     }
   })
 

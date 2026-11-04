@@ -49,6 +49,31 @@ test.describe('start screen and header (FR-1, FR-10)', () => {
     expect(await overlap(header, zoomIn)).toBe(false)
   })
 
+  // An iPhone 14, whose width the panel spans, and a Pixel 7, where the panel is 360 px wide and
+  // still reaches over the zoom controls.
+  for (const width of [390, 412]) {
+    test(`keeps the zoom controls usable beside the chat panel on a ${width} px phone`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 })
+
+      await page.goto('/')
+
+      const panel = page.getByRole('complementary', { name: 'Chat' })
+      const zoomIn = page.getByRole('button', { name: 'Zoom in' })
+      const zoomOut = page.getByRole('button', { name: 'Zoom out' })
+      await expect(panel).toBeVisible()
+      await expect(zoomOut).toBeVisible()
+      expect(await overlap(panel, zoomIn)).toBe(false)
+      expect(await overlap(panel, zoomOut)).toBe(false)
+      await zoomIn.click()
+      await expect(page.getByRole('region', { name: 'World map' })).toHaveAttribute(
+        'data-zoom',
+        '6',
+      )
+    })
+  }
+
   test('keeps the map attribution clear of the chat panel', async ({ page }) => {
     await page.goto('/')
 

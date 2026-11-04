@@ -131,6 +131,76 @@ test.describe('messages (FR-4, FR-5)', () => {
     expect(await overlap(panel, attribution)).toBe(false)
   })
 
+  test('a long chat on a phone leaves the zoom controls and the attribution clear', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await seedRooms(1)
+    await seedMessages(1, 120)
+
+    await page.goto('/?room=1')
+    await expect(messageList(page).getByText('Message 120', { exact: true })).toBeVisible()
+
+    const panel = page.getByRole('complementary', { name: 'Chat' })
+    for (const control of [
+      page.getByRole('button', { name: 'Zoom in' }),
+      page.getByRole('button', { name: 'Zoom out' }),
+      page.locator('.leaflet-control-attribution'),
+    ]) {
+      expect(await overlap(panel, control)).toBe(false)
+    }
+  })
+
+  test('a short phone screen keeps the message field and Submit in view, clear of the zoom controls', async ({
+    page,
+  }) => {
+    // A phone sharing its screen with another app.
+    await page.setViewportSize({ width: 390, height: 320 })
+    await seedRooms(1)
+
+    await page.goto('/?room=1')
+
+    await expect(messageField(page)).toBeInViewport({ ratio: 1 })
+    await expect(page.getByRole('button', { name: 'Submit' })).toBeInViewport({ ratio: 1 })
+    const panel = page.getByRole('complementary', { name: 'Chat' })
+    for (const control of [
+      page.getByRole('button', { name: 'Zoom in' }),
+      page.getByRole('button', { name: 'Zoom out' }),
+    ]) {
+      expect(await overlap(panel, control)).toBe(false)
+    }
+  })
+
+  test('a panel too short for its composer scrolls, so Submit stays within reach', async ({
+    page,
+  }) => {
+    // Even beside the zoom controls, the room's header and composer don't fit in this height.
+    await page.setViewportSize({ width: 390, height: 250 })
+    await seedRooms(1)
+    await page.goto('/?room=1')
+    await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+
+    await page.getByRole('complementary', { name: 'Chat' }).hover()
+    await page.mouse.wheel(0, 300)
+
+    await expect(page.getByRole('button', { name: 'Submit' })).toBeInViewport({ ratio: 1 })
+  })
+
+  test('the next room opens at its top, even after the panel was scrolled', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 250 })
+    await seedRooms(1)
+    await page.goto('/?room=1')
+    await expect(page.getByRole('heading', { name: 'Chatroom 1' })).toBeVisible()
+    await page.getByRole('complementary', { name: 'Chat' }).hover()
+    await page.mouse.wheel(0, 300)
+    await expect(page.getByRole('button', { name: 'Submit' })).toBeInViewport({ ratio: 1 })
+
+    // On the map, left of the panel and below the zoom controls: creates room 2 and opens it.
+    await page.mouse.click(30, 200)
+
+    await expect(page.getByRole('heading', { name: 'Chatroom 2' })).toBeInViewport({ ratio: 1 })
+  })
+
   test.describe('when the server limits sends', () => {
     test.use({ allowedConsoleErrors: [/Failed to load resource/] })
 

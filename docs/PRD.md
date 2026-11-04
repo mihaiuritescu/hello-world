@@ -12,7 +12,7 @@ v1 delivers FR-1 to FR-6 (including the optional real-time part), a one-command 
 
 ## Functional requirements
 
-- **FR-1, start screen:** a map of Europe filling the window below the header (FR-10), with zoom top-left, attribution bottom-right (never covered) and a top-right panel reading "Click on the map to start a chat".
+- **FR-1, start screen:** a map of Europe filling the window below the header (FR-10), with zoom top-left and attribution bottom-right (both never covered) and a top-right panel reading "Click on the map to start a chat".
 - **FR-2, create a room:** a map click adds a pin and opens "Chatroom N". A click or double-click makes exactly one room, a drag none. Enter on the focused map makes one at its centre.
 - **FR-3, open a room:** a pin click, or Enter on a focused pin, opens that room and highlights the pin.
 - **FR-4, post a message:** a name and a text add author, text and date (`01/02/2017, 14:05`). The text clears; the name stays.
@@ -25,7 +25,7 @@ v1 delivers FR-1 to FR-6 (including the optional real-time part), a one-command 
 
 **Assumptions.** Users are anonymous, so a name (1–40 characters, kept in the browser) can be impersonated. Messages have 1–1,000 characters. A room loads its latest 100 messages, the map its 1,000 newest rooms. Room names have 1–40 characters. A room's creator is the browser that created it, which keeps a secret token for the room in `localStorage`: clearing site data or switching browsers gives up control. The online count counts open windows. Dates use local time, and the time of day is an addition to the mockup.
 
-**User interface.** A header runs across the top, the map fills the rest of the window and a 360 px card floats top-right. Before a room is open, the card shows the start text and a keyboard hint. Once a room is open, it shows the title (with the room's number under a custom name), rename and delete buttons for its creator, a scrollable message list, the fields "write your user name here" and "write message here", Submit and a live-connection chip.
+**User interface.** A header runs across the top, the map fills the rest of the window and a 360 px card floats top-right: on a screen too narrow for both, below the zoom buttons, or beside them if the screen is short too. Before a room is open, the card shows the start text and a keyboard hint. Once a room is open, it shows the title (with the room's number under a custom name), rename and delete buttons for its creator, a scrollable message list, the fields "write your user name here" and "write message here", Submit and a live-connection chip.
 
 Unlike the mockups, the app is called Hello World (a nod to the world map and to everyone's first program). It uses OpenStreetMap's standard tiles and says "No messages yet" in a new room.
 
