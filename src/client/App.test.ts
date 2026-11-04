@@ -110,7 +110,7 @@ describe('App, when the open room is deleted', () => {
     expect(useSessionStore().selectedRoomId).toBeNull()
   })
 
-  it('names a renamed room by its name when it is deleted', async () => {
+  it('names a renamed room by its name and number when it is deleted', async () => {
     const screen = await openApp('/?room=900', Promise.resolve(room(5)))
     // Each socket event arrives in a task of its own, so the app sees the new name first.
     fake.receive('room:updated', room(900, { name: 'Picnic', revision: 1 }))
@@ -119,7 +119,7 @@ describe('App, when the open room is deleted', () => {
     fake.receive('room:deleted', { id: 900 })
     await flushPromises()
 
-    expect(await screen.findByText('Picnic was deleted.')).toBeInTheDocument()
+    expect(await screen.findByText('Picnic (Chatroom 900) was deleted.')).toBeInTheDocument()
   })
 
   it('says nothing when a room other than the open one is deleted', async () => {

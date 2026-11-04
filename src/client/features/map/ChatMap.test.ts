@@ -142,7 +142,8 @@ describe('ChatMap pins', () => {
     expect(screen.getByTitle('Chatroom 3')).toBeInTheDocument()
   })
 
-  it("names a pin after its room, and follows the room's renames", async () => {
+  // A name can copy another room's, such as "Chatroom 3", but never its number.
+  it("names a renamed room's pin with its number too, and follows its renames", async () => {
     const { wrapper } = await renderMap([room(1)])
     unmount = () => wrapper.unmount()
     const screen = within(document.body)
@@ -150,7 +151,7 @@ describe('ChatMap pins', () => {
     await wrapper.setProps({ rooms: [room(1, { name: 'Picnic', revision: 1 })] })
 
     expect(screen.queryByTitle('Chatroom 1')).not.toBeInTheDocument()
-    expect(screen.getByTitle('Picnic')).toHaveAttribute('alt', 'Picnic')
+    expect(screen.getByTitle('Picnic (Chatroom 1)')).toHaveAttribute('alt', 'Picnic (Chatroom 1)')
   })
 
   it('names a pin drawn again after a circle with its newest name', async () => {
@@ -160,7 +161,7 @@ describe('ChatMap pins', () => {
 
     await wrapper.setProps({ rooms: [room(1, { ...SAME_SPOT, name: 'Picnic' }), room(2)] })
 
-    expect(screen.getByTitle('Picnic')).toBeInTheDocument()
+    expect(screen.getByTitle('Picnic (Chatroom 1)')).toBeInTheDocument()
   })
 
   it('puts a name with markup on its pin as plain text, which runs nothing', async () => {
@@ -169,7 +170,7 @@ describe('ChatMap pins', () => {
     unmount = () => wrapper.unmount()
     const screen = within(document.body)
 
-    expect(screen.getByTitle(name)).toHaveAttribute('alt', name)
+    expect(screen.getByTitle(`${name} (Chatroom 1)`)).toHaveAttribute('alt', `${name} (Chatroom 1)`)
     expect(document.querySelector('img[src="x"], [onerror]')).toBeNull()
   })
 })

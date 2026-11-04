@@ -12,3 +12,12 @@ export function roomTitle(room: Pick<Room, 'id' | 'name'>): string {
 export function defaultRoomTitle(roomId: number): string {
   return `Chatroom ${roomId}`
 }
+
+/**
+ * A room's name with its number, such as "Picnic (Chatroom 9)", for wherever the number isn't
+ * shown next to it: a pin, a notice, a dialog. A name can copy another room's, but not its number.
+ */
+export function roomLabel(room: Pick<Room, 'id' | 'name'>): string {
+  const number = defaultRoomTitle(room.id)
+  return room.name === null ? number : `${room.name} (${number})`
+}

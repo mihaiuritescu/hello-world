@@ -19,7 +19,7 @@ v1 delivers FR-1 to FR-6 (including the optional real-time part), a one-command 
 - **FR-5, persistence:** rooms and messages survive reloads and browser or server restarts.
 - **FR-6, real time:** other browsers see new pins and messages within 1 s, without duplicates and in the same order.
 - **FR-7, pin clusters:** when zoomed out, pins that overlap on screen merge into a circle showing how many rooms it holds. A click on it, or Enter on it when focused, zooms in until they separate. The open room's pin never merges, and nothing merges at the deepest zoom.
-- **FR-8, rename a room:** the browser that created a room can rename it (1–40 characters, the same rules as author names) or restore "Chatroom N". Other browsers see the new name within 1 s, and a renamed room still shows its number.
+- **FR-8, rename a room:** the browser that created a room can rename it (1–40 characters, the same rules as author names) or restore "Chatroom N". Other browsers see the new name within 1 s, and a renamed room still shows its number: under its title, and with its name on its pin.
 - **FR-9, delete a room:** the browser that created a room can delete it, after confirming, while it has no messages. Its pin disappears for everyone within 1 s, and browsers that have it open go back to the start screen with a notice. After its first message, the room can no longer be deleted.
 - **FR-10, header:** a bar above the map shows the app's name, a one-line description and how many windows have the app open, updated within 2 s.
 
@@ -59,7 +59,7 @@ Unlike the mockups, the app is called Hello World (a nod to the world map and to
 - **Spam:** rate and length limits apply. Moderation is out of scope.
 - **Map tiles:** OpenStreetMap's public tiles are best-effort. Usage stays light, and switching provider is one setting.
 - **Single instance:** accepted for the demo. The scale-out path is in the infrastructure notes.
-- **Look-alike room names:** a creator can name a room after another one. The room's number stays visible under the name.
+- **Look-alike room names:** a creator can name a room after another one. The room's number stays visible under the name, and goes with the name on its pin and in notices.
 
 ## Revisions
 

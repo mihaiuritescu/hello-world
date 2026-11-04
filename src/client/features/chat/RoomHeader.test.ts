@@ -248,6 +248,14 @@ describe('RoomHeader', () => {
     expect(useRoomsStore().isDeleted(7)).toBe(true)
   })
 
+  it('asks about a renamed room by its name and its number', async () => {
+    const { screen, user } = await renderLoadedHeader(room(7, { name: 'Chatroom 3' }), [])
+
+    await user.click(screen.getByRole('button', { name: 'Delete this room' }))
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Delete Chatroom 3 (Chatroom 7)?')
+  })
+
   it('keeps the room when the creator cancels', async () => {
     const { screen, user } = await renderLoadedHeader(room(7), [])
 

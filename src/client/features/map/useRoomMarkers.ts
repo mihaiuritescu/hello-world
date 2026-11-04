@@ -1,7 +1,7 @@
 import type { Room } from '#shared/domain.ts'
 import L from 'leaflet'
 import { onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
-import { roomTitle } from '../../lib/roomTitle.ts'
+import { roomLabel } from '../../lib/roomTitle.ts'
 import { clusterIcon } from './clusterIcon.ts'
 import { clusterRooms, type RoomGroup } from './clusterRooms.ts'
 import { pinIcon } from './pinIcon.ts'
@@ -83,7 +83,7 @@ export function useRoomMarkers(
   function drawPin(instance: L.Map, room: Room): void {
     let pin = pins.get(room.id)
     if (pin) {
-      setTitle(pin, roomTitle(room))
+      setTitle(pin, roomLabel(room))
     } else {
       pin = createPin(room)
       pins.set(room.id, pin)
@@ -108,7 +108,8 @@ export function useRoomMarkers(
   }
 
   function createPin(room: Room): L.Marker {
-    const title = roomTitle(room)
+    // Pins are where rooms are picked, so a renamed room keeps its number in the name they read.
+    const title = roomLabel(room)
     return L.marker([room.lat, room.lng], { icon: pinIcon, title, alt: title, keyboard: true })
       .on('click', () => onSelect(room.id))
       .on('keydown', (event: L.LeafletKeyboardEvent) => {

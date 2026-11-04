@@ -109,7 +109,7 @@ test.describe('real time (FR-6)', () => {
     await expect(secondPage.getByRole('complementary', { name: 'Chat' })).toContainText(
       'Chatroom 1',
     )
-    await expect(secondPage.getByTitle('Picnic')).toBeVisible()
+    await expect(secondPage.getByTitle('Picnic (Chatroom 1)')).toBeVisible()
   })
 
   test('a window that lost its connection catches up when it reconnects', async ({

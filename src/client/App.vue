@@ -5,7 +5,7 @@ import ChatPanel from './features/chat/ChatPanel.vue'
 import AppHeader from './features/header/AppHeader.vue'
 import ChatMap from './features/map/ChatMap.vue'
 import { isRateLimited } from './lib/http.ts'
-import { defaultRoomTitle, roomTitle } from './lib/roomTitle.ts'
+import { defaultRoomTitle, roomLabel } from './lib/roomTitle.ts'
 import { useRealtimeStore } from './stores/realtime.ts'
 import { useRoomsStore } from './stores/rooms.ts'
 import { useSessionStore } from './stores/session.ts'
@@ -37,7 +37,7 @@ onMounted(async () => {
 // back to the start screen, and so does the URL, and the snackbar says why.
 watch(selectedRoom, (room, previous) => {
   if (room !== null || previous === null || !rooms.isDeleted(previous.id)) return
-  notice.value = { text: `${roomTitle(previous)} was deleted.`, tone: 'news' }
+  notice.value = { text: `${roomLabel(previous)} was deleted.`, tone: 'news' }
   if (session.selectedRoomId === previous.id) session.selectRoom(null)
 })
 

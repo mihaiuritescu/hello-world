@@ -4,7 +4,7 @@ import { textProblem } from '#shared/text.ts'
 import { mdiDeleteOutline, mdiPencilOutline } from '@mdi/js'
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 import { ApiError, isRateLimited } from '../../lib/http.ts'
-import { defaultRoomTitle, roomTitle } from '../../lib/roomTitle.ts'
+import { defaultRoomTitle, roomLabel, roomTitle } from '../../lib/roomTitle.ts'
 import { useMessagesStore } from '../../stores/messages.ts'
 import { useRealtimeStore } from '../../stores/realtime.ts'
 import { useRoomsStore } from '../../stores/rooms.ts'
@@ -18,6 +18,8 @@ const realtime = useRealtimeStore()
 const messages = useMessagesStore()
 
 const title = computed(() => roomTitle(props.room))
+/** The name with the number, for the dialog, which shows no number beside it. */
+const label = computed(() => roomLabel(props.room))
 /** Only the browser that created a room holds its owner token, and may change the room. */
 const isCreator = computed(() => session.ownsRoom(props.room.id))
 /**
@@ -183,7 +185,7 @@ function clearRenameError(): void {
         </template>
         <v-card>
           <v-card-title :id="deleteTitleId" tag="h2" class="room-header__dialog-title">
-            Delete {{ title }}?
+            Delete {{ label }}?
           </v-card-title>
           <v-card-text>Its pin disappears for everyone, and this can't be undone.</v-card-text>
           <v-card-text v-if="deleteError" role="alert" class="text-error">

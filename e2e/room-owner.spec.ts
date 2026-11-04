@@ -29,8 +29,8 @@ test.describe("a room's creator (FR-8)", () => {
 
     await expect(heading(page, 'Picnic by the lake')).toBeVisible()
     await expect(page.getByRole('complementary', { name: 'Chat' })).toContainText('Chatroom 1')
-    await expect(page.getByTitle('Picnic by the lake')).toBeVisible()
-    await expect(page.getByTitle('Chatroom 1')).toHaveCount(0)
+    await expect(page.getByTitle('Picnic by the lake (Chatroom 1)')).toBeVisible()
+    await expect(page.getByTitle('Chatroom 1', { exact: true })).toHaveCount(0)
   })
 
   test('sees a name with markup as plain text, which runs nothing', async ({ page }) => {
@@ -46,7 +46,7 @@ test.describe("a room's creator (FR-8)", () => {
     await rename(page, name)
 
     await expect(heading(page, name)).toBeVisible()
-    await expect(page.getByTitle(name)).toBeVisible()
+    await expect(page.getByTitle(`${name} (Chatroom 1)`)).toBeVisible()
     await page.reload()
     await expect(heading(page, name)).toBeVisible()
     await expect(page.locator('img[src="x"], [onerror]')).toHaveCount(0)
