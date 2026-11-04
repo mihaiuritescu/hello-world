@@ -28,10 +28,13 @@ export const useRoomsStore = defineStore('rooms', () => {
   // Numbers loads, so a load's result counts only if no load that started later has settled
   // first. An older load that answers late may miss rooms created since, and still hold rooms
   // deleted since: its 'ready' must not hide a newer failure and stop the polling that retries
-  // it, and it must not drop rooms either. A failure counts at once, even while a newer load runs:
-  // polls that overlap would otherwise hide every failure behind the next attempt.
+  // it. A failure counts at once, even while a newer load runs: polls that overlap would
+  // otherwise hide every failure behind the next attempt.
   let started = 0
   let settled = 0
+  // The newest load whose list arrived. An older list that answers after it may still hold rooms
+  // deleted since, so it adds no rooms and drops none: it only refreshes rooms already here.
+  let newestListed = 0
 
   // When each room was last confirmed by an announcement or a single-room answer, numbered by
   // `confirmations`. A list counts a missing room as gone only when nothing confirmed the room
@@ -101,8 +104,13 @@ export const useRoomsStore = defineStore('rooms', () => {
     if (status.value === 'idle') status.value = 'loading'
     try {
       const { rooms } = await requestJson<{ rooms: Room[] }>('/api/rooms')
-      rooms.forEach(put)
-      if (loadId >= settled) dropMissing(rooms, askedAt)
+      if (loadId > newestListed) {
+        newestListed = loadId
+        rooms.forEach(put)
+        dropMissing(rooms, askedAt)
+      } else {
+        for (const room of rooms) if (byId.value.has(room.id)) put(room)
+      }
       settle(loadId, 'ready')
     } catch {
       settle(loadId, 'error')

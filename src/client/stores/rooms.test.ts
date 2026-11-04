@@ -183,6 +183,23 @@ describe('rooms store', () => {
     expect(rooms.isDeleted(1)).toBe(false)
   })
 
+  it('lets a list that answers after a newer one add no rooms: they may be deleted since', async () => {
+    const older = deferred<{ rooms: Room[] }>()
+    const newer = deferred<{ rooms: Room[] }>()
+    requestJsonMock.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+    const rooms = useRoomsStore()
+    const olderLoad = rooms.load()
+    const newerLoad = rooms.load()
+
+    // Room 5 was deleted between the two lists, before this window ever saw it.
+    newer.resolve({ rooms: [room(1)] })
+    await newerLoad
+    older.resolve({ rooms: [room(1), room(5)] })
+    await olderLoad
+
+    expect(rooms.list.map((r) => r.id)).toEqual([1])
+  })
+
   it('lets a reload that settles after a newer one drop nothing', async () => {
     requestJsonMock.mockResolvedValueOnce({ rooms: [room(1), room(2)] })
     const rooms = useRoomsStore()
