@@ -99,7 +99,7 @@ The [PRD](docs/PRD.md) has the decisions and the invariants behind them.
 
 ## Deployment
 
-The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behind Caddy and Let's Encrypt, with RDS for MySQL, from a single CloudFormation stack. Its address comes from nip.io, which resolves a name like `3-125-55-249.nip.io` to the IP address it spells, so the demo needs no domain. [The runbook](infra/aws/RUNBOOK.md) gives every step, from the first check to the teardown, and [Infrastructure and costs](docs/INFRASTRUCTURE.md) covers the architecture and the monthly cost of staging and production.
+The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behind Caddy and Let's Encrypt, with RDS for MySQL, from a single CloudFormation stack. Its address comes from nip.io, which resolves a name like `3-125-55-249.nip.io` to the IP address it spells, so the demo needs no domain. Pushing a version tag such as `v1.0.0` deploys it: CI tests the commit, publishes the image and deploys it, with no AWS keys stored in GitHub. [The runbook](infra/aws/RUNBOOK.md) gives every step, from the first check to the teardown, and [Infrastructure and costs](docs/INFRASTRUCTURE.md) covers the architecture and the monthly cost of staging and production.
 
 ## Documentation
 
@@ -117,7 +117,7 @@ The [live demo](https://3-125-55-249.nip.io) runs on AWS: one EC2 instance behin
 - **Keyboard access:** Enter on the focused map creates a room, and Enter on a pin opens it. axe scans the main screens and the load errors in CI.
 - **Loading, empty and error states,** with Retry.
 - **Rate limits per client,** on the API and on the WebSockets.
-- **[A live AWS demo](https://3-125-55-249.nip.io),** with HTTPS, from one CloudFormation stack, and a cost estimate for staging and production.
+- **[A live AWS demo](https://3-125-55-249.nip.io),** with HTTPS, from one CloudFormation stack, deployed by pushing a version tag, and a cost estimate for staging and production.
 - **A multi-agent self-review,** with its report and triage.
 
 ## Limitations

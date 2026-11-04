@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    # A version tag, such as v1.0.0, also deploys the demo: see the deploy job.
+    tags: ['v[0-9]*']
   pull_request:
 
 permissions:
@@ -77,20 +79,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Lint the CloudFormation template
         run: pipx run cfn-lint==1.59.0 infra/aws/hello-world-demo.yaml
-      - name: Lint the host deploy script
-        run: shellcheck deploy/aws/deploy.sh
+      - name: Lint the deploy scripts
+        run: shellcheck deploy/aws/deploy.sh infra/aws/ci-deploy.sh
 
   publish:
-    # The image the AWS demo runs: main only, once every other check has passed. Deploys pin the
-    # digest this job prints (see infra/aws/RUNBOOK.md).
+    # The image the AWS demo runs, for main and for version tags, once every other check has passed.
+    # A tag's deploy job deploys its digest; a deploy by hand pins the digest this job prints (see
+    # infra/aws/RUNBOOK.md).
     name: Publish the arm64 image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [verify, e2e, docker, infra]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to GitHub Container Registry
@@ -98,6 +105,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push the image
+        id: image
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           docker build \
@@ -113,3 +121,62 @@ jobs:
             echo "- ImageDigest: \`$digest\`"
             echo "- GitSha: \`$GITHUB_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    # A version tag deploys the image its own run published. The AWS role trusts only jobs that run
+    # for this repository's version tags, v and a digit (infra/aws/RUNBOOK.md, "Deploy from a tag").
+    # The job stays outside any environment: in one, GitHub's token names the environment instead
+    # of the tag, and the role refuses it. Any step of this job could ask GitHub for that token, so
+    # it runs nothing but the deploy script.
+    name: Deploy to the AWS demo
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    # Deploys never overlap: a deploy waits for the one running, and GitHub keeps only the newest
+    # one waiting.
+    concurrency:
+      group: deploy-demo
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      site-url: ${{ steps.deploy.outputs.site-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Deploy the image
+        id: deploy
+        run: bash infra/aws/ci-deploy.sh "$IMAGE_DIGEST"
+        env:
+          IMAGE_DIGEST: ${{ needs.publish.outputs.image-digest }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          STACK: ${{ vars.AWS_STACK || 'hello-world-demo' }}
+
+  smoke:
+    # Step 8 of the runbook, in a job without the AWS token. The environment only records the
+    # deployment and its URL on GitHub; the AWS role doesn't depend on it.
+    name: Check the deployed demo
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: demo
+      url: ${{ needs.deploy.outputs.site-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # For the smoke test's WebSocket client.
+      - run: pnpm install --frozen-lockfile
+      - name: Smoke test
+        run: node scripts/smoke.ts "$SITE_URL" "$GITHUB_SHA"
+        env:
+          SITE_URL: ${{ needs.deploy.outputs.site-url }}

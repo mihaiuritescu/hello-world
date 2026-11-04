@@ -5,14 +5,18 @@ function read(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 }
 
-/** The names under the stack template's top-level `Parameters` key. */
-function templateParameters(): string[] {
+/** The names under one top-level key of the stack template, which `nextKey` follows. */
+function templateNames(key: string, nextKey: string): string[] {
   const template = read('infra/aws/hello-world-demo.yaml')
   const section = template.slice(
-    template.indexOf('\nParameters:\n'),
-    template.indexOf('\nConditions:\n'),
+    template.indexOf(`\n${key}:\n`),
+    template.indexOf(`\n${nextKey}:\n`),
   )
   return [...section.matchAll(/^ {2}(\w+):$/gm)].map(([, name]) => name ?? '')
+}
+
+function templateParameters(): string[] {
+  return templateNames('Parameters', 'Conditions')
 }
 
 describe('the AWS runbook', () => {
@@ -25,5 +29,11 @@ describe('the AWS runbook', () => {
 
     expect(templateParameters()).toHaveLength(6)
     expect(kept.sort()).toEqual(templateParameters().sort())
+  })
+
+  it('expects one change set row for each resource when it creates the stack', () => {
+    const rows = /Expect (\d+) rows, all `Add`/.exec(read('infra/aws/RUNBOOK.md'))?.[1]
+
+    expect(Number(rows)).toBe(templateNames('Resources', 'Outputs').length)
   })
 })

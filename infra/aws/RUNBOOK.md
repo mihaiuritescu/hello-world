@@ -15,6 +15,8 @@ Every AWS step for the Hello World demo, in order. A person runs these commands.
 |---|---|
 | The first deploy | 1 to 9 |
 | A redeploy or a rollback | 1, 2, 3, 7, 8, 9 ([details](#redeploy-or-roll-back)) |
+| Setting up deploys from a tag, once | 1, 3, [Deploy from a tag](#deploy-from-a-tag), 9 |
+| A deploy from a tag | None: push the tag ([Release](#release)) |
 | A stack update, or logs and troubleshooting | 1, 3, the section you need, 9 |
 | Teardown | 1, 3, [Teardown](#teardown-about-10-minutes), 9 |
 
@@ -146,9 +148,12 @@ aws rds describe-orderable-db-instance-options --engine mysql \
   --query 'length(OrderableDBInstanceOptions)'
 
 echo "$IMAGE_ID $DB_ENGINE_VERSION"
+
+# The stack creates GitHub's OpenID Connect provider, and an account can hold only one.
+aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text
 ```
 
-Expect `t4g.micro` and `t4g.small` in either order, then a number above 0, then `ami-…` and `8.4.…`. If only `t4g.micro` shows, add `ParameterKey=InstanceType,ParameterValue=t4g.micro` to the parameters in step 6.
+Expect `t4g.micro` and `t4g.small` in either order, then a number above 0, then `ami-…` and `8.4.…`. Last, expect no ARN that ends in `token.actions.githubusercontent.com`; if one shows, stop, because the stack can't create a second. If only `t4g.micro` shows, add `ParameterKey=InstanceType,ParameterValue=t4g.micro` to the parameters in step 6.
 
 ## 5. Budgets (once per account)
 
@@ -178,7 +183,7 @@ aws cloudformation describe-change-set --stack-name "$STACK" --change-set-name c
   --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' --output table
 ```
 
-Expect 24 rows, all `Add`. Then create it:
+Expect 26 rows, all `Add`. Then create it:
 
 ```bash
 aws cloudformation execute-change-set --stack-name "$STACK" --change-set-name create
@@ -234,10 +239,77 @@ Then open Claude Code again. To have it check the demo too, paste `SITE_URL` and
 
 ## Redeploy or roll back
 
+Once [deploys from a tag](#deploy-from-a-tag) are set up, a version tag does this for you. By hand:
+
 - **Redeploy:** steps 1, 2 for the new image, 3, 7, 8 and 9.
 - **Roll back:** the same, but instead of step 2, export the previous `IMAGE_DIGEST` and `GIT_SHA`.
 
 A deploy interrupts the app for a few seconds. Caddy holds the requests meanwhile, and clients reconnect by themselves. A rollback leaves the database as it is: migrations only add, so the older version runs on the newer schema.
+
+## Deploy from a tag
+
+Once this is set up, pushing a version tag deploys it, with no AWS session on your side:
+1. CI tests the tagged commit and publishes its image.
+2. Its deploy job signs in to AWS with GitHub's OpenID Connect token.
+3. It runs step 7 with the new digest.
+4. A last job runs step 8.
+
+AWS checks the token itself: the role trusts only jobs that run for a tag of this repository named `v` and a digit, such as `v1.0.0`. The role may only:
+- read the stack's outputs;
+- send the deploy document to the instance, which deploys any image of this repository's package;
+- read the status and output of commands, given their IDs.
+
+### Set up once (about 10 minutes)
+
+**On AWS,** after steps 1 and 3. A stack created before this section existed, such as the first demo, has no deploy role yet:
+
+1. **Check for an existing provider.** The stack creates GitHub's OpenID Connect provider, and an account can hold only one, so check that there is none:
+
+   ```bash
+   aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text
+   ```
+
+   Expect no ARN that ends in `token.actions.githubusercontent.com`. If there is one, stop here: the stack can't create a second.
+
+2. **[Update the stack](#update-the-stack)** with this repository's template. Expect two rows, both `Add`: `GitHubOidcProvider` and `GitHubDeployRole`.
+
+A stack created from this template already has both, so for one of those, start here:
+
+3. **Print the role's ARN:**
+
+   ```bash
+   output DeployRoleArn
+   ```
+
+4. **Sign out** (step 9).
+
+**On GitHub,** in the repository's **Settings → Secrets and variables → Actions → Variables**, add these repository variables. None of them is a secret.
+- `AWS_REGION`: your `AWS_REGION` from step 1.
+- `AWS_DEPLOY_ROLE_ARN`: the ARN printed above. A stack that is deleted and created again gets a new role, so update this variable then.
+- `AWS_STACK`: only if your `STACK` isn't `hello-world-demo`.
+
+### Release
+
+Tag a commit on `main`, then push the tag:
+
+```bash
+git tag -a v1.0.0 -m "v1.0.0"
+git push origin v1.0.0
+```
+
+Only a person pushes tags, because a tag deploys with no approval step. Claude Code's git guard blocks the tag pushes it recognises: a net for mistakes, not a lock against an agent set on deploying.
+
+**Push one tag at a time,** and wait for its run to end. Deploys never overlap, but they start in the order their checks finish, so a tag pushed later could deploy first.
+
+**What to expect:**
+- **Success:** in **Actions**, the tag's run ends with **Check the deployed demo**, which prints the smoke test's `OK: …` line. The repository's **Deployments** then links to the demo.
+- **A check before the deploy fails:** nothing is deployed, and the demo keeps the version it had.
+- **The deploy fails:** its log shows the host's error output; see [Logs and troubleshooting](#logs-and-troubleshooting). Depending on where it failed, the demo runs the old version or the new one, or is down. [Roll back](#roll-back) if it doesn't run the old one.
+- **The smoke test fails:** the new version is already live. Look at the demo, then roll back, or fix forward with a new tag.
+
+### Roll back
+
+In **Actions**, open the previous tag's run and re-run its **Deploy to the AWS demo** job. It deploys that run's image again, and the check after it runs too. GitHub keeps runs re-runnable for 30 days; after that, [roll back by hand](#redeploy-or-roll-back).
 
 ## Update the stack
 

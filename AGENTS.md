@@ -34,7 +34,7 @@ Integration tests need MySQL, so run `pnpm db:up` first.
   - helpers (`lib/`).
 - `e2e/`: Playwright specs.
 - `scripts/`: repository tooling.
-- `infra/aws/`: the CloudFormation template and the deploy runbook.
+- `infra/aws/`: the CloudFormation template, the deploy runbook and CI's deploy script.
 - `deploy/aws/`: the files the EC2 host runs.
 - `docs/`: PRD, infrastructure and costs, AI setup, review reports.
 
@@ -105,14 +105,17 @@ Integration tests need MySQL, so run `pnpm db:up` first.
 - **Agents never:**
   - run `aws` or `gh` commands;
   - read `~/.aws`;
-  - print or store credentials or secret values.
+  - print or store credentials or secret values;
+  - push tags: a version tag deploys the demo.
 - **Agents write the AWS steps** into `infra/aws/RUNBOOK.md`, and a human runs them.
+- **Deploys:** CI deploys a version tag that a person pushes, signed in through GitHub's OpenID Connect token. Everything else on AWS goes through the runbook.
 - **No agent session runs** while an AWS session is signed in.
 
 ## Git
 
 - **Commit messages:** Conventional Commits, `type(scope): summary`. The body explains why and adds `Refs: FR-n` where it applies.
 - **Commit size:** small, focused commits on `main`; CI runs on every push.
+- **Releases:** a person tags a commit on `main` as `vX.Y.Z` and pushes the tag, which deploys the demo.
 - **History:** never force-push, and never rewrite published history.
 
 ## Delivery slices

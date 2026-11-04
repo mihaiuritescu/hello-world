@@ -20,6 +20,7 @@ In US dollars a month, at on-demand list prices for eu-central-1 (AWS Price List
 | Egress | Data out: 5 GB, then 50 GB, at $0.09/GB | | 0.45 | 4.50 |
 | DNS and TLS | Staging: a nip.io name and Let's Encrypt. Production: a Route 53 zone and a real domain | HTTPS for the demo without buying a domain | 0.00 | 0.54 |
 | Images and CI | GHCR (a public package) and GitHub Actions (a public repository) | Free | 0.00 | 0.00 |
+| Deploys | An IAM OpenID Connect provider and role for GitHub Actions | A pushed version tag deploys, with no stored AWS keys | 0.00 | 0.00 |
 | Map tiles | OpenStreetMap's tile servers | No API key; Leaflet's default | 0.00 | 0.00* |
 | **List total** | | | **37.97** | **92.59** |
 | After the always-free offers (5 GB of logs, 100 GB of egress, 10 alarms) | | | 36.20 | 84.44 |
@@ -74,19 +75,23 @@ The demo needs no domain. Its address, `3-125-55-249.nip.io`, is a name that nip
 | IAM role and instance profile | SSM through AWS's managed policy, the one secret and the one log group. The managed policy also reads any SSM parameter in the account, so the demo account keeps no secrets in Parameter Store |
 | CloudWatch log group | Seven days of container logs |
 | SSM document | Deploys one image of this repository's GHCR package, pinned by digest |
+| GitHub OpenID Connect provider and deploy role | Only GitHub Actions jobs that run for a version tag of this repository (`v` and a digit) can assume the role, and AWS checks the tag in GitHub's token. The role may read the stack's outputs, send the deploy document to the instance and read the commands' status. The document deploys any image of this repository's package |
 
 **Teardown:** deleting the stack deletes all of it, with no final snapshot and no backups kept. [The runbook](../infra/aws/RUNBOOK.md#teardown-about-10-minutes) gives the steps, inside a signed-in session.
 
-**Known limits of the demo:** the app connects as the database's master user, and the instance doesn't install OS updates by itself. Production would add a least-privilege database user and automatic patching.
+**Known limits of the demo:**
+- The app connects as the database's master user. Production would add a least-privilege database user.
+- The instance doesn't install OS updates by itself. Production would add automatic patching.
+- The deploy role's trust names the GitHub repository. So before the account or the repository is renamed, update or delete the stack.
 
 ## Deploying
 
-- **Build:** CI tests every push. On `main`, its `publish` job builds the arm64 image, pushes it to GHCR, and prints the digest.
-- **Deploy:** one `aws ssm send-command` runs the stack's deploy document on the instance.
+- **Build:** CI tests every push. On `main` and on version tags, its `publish` job builds the arm64 image, pushes it to GHCR, and prints the digest.
+- **Deploy:** pushing a version tag, such as `v1.0.0`, deploys it. CI's deploy job signs in to AWS with GitHub's OpenID Connect token, so no AWS key is stored anywhere, and runs the stack's deploy document on the instance. By hand, one `aws ssm send-command` does the same.
   - The document pulls the image and takes the host files ([`deploy/aws/`](../deploy/aws)) out of it, so they always match the app.
   - It writes the settings from Secrets Manager into a file only root can read, runs the migrations and restarts the containers.
   - A deploy interrupts the app for a few seconds; Caddy holds the requests meanwhile, and clients reconnect by themselves.
-- **Roll back:** deploy the previous image. Migrations only add, so the older version runs on the newer schema, and its migrate step leaves the database as it is.
-- **Check:** `node scripts/smoke.ts <site URL> <commit>` checks the version, the database and the WebSocket from anywhere, without AWS access. It waits up to three minutes for a site that is still starting.
+- **Roll back:** deploy the previous image, by re-running an earlier tag's deploy job or by hand. Migrations only add, so the older version runs on the newer schema, and its migrate step leaves the database as it is.
+- **Check:** `node scripts/smoke.ts <site URL> <commit>` checks the version, the database and the WebSocket from anywhere, without AWS access. It waits up to three minutes for a site that is still starting. CI's last job, **Check the deployed demo**, runs it after every tag deploy.
 
-People run every AWS command, from the runbook; AI tools only write them ([AGENTS.md](../AGENTS.md), Cloud safety). The next step is a deploy from GitHub Actions through OIDC, which needs no long-lived AWS credentials.
+People run every AWS command from the runbook and push the tags that deploy; AI tools only write the steps ([AGENTS.md](../AGENTS.md), Cloud safety). A tag deploys with no approval step, so the git guard that blocks tag pushes from AI tools is a safety net, not a lock. No long-lived AWS credentials exist: people sign in with short-lived ones, and CI with GitHub's token.

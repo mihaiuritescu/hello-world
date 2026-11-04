@@ -2,7 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   Hello World demo: one EC2 instance runs Caddy and the app with Docker Compose, in front of a
   private RDS MySQL 8.4 database. Deleting the stack deletes everything in it. Deploys go through
-  the stack's SSM document; see infra/aws/RUNBOOK.md.
+  the stack's SSM document, sent by hand or by GitHub Actions for a version tag; see
+  infra/aws/RUNBOOK.md.
 
 Parameters:
   ImageId:
@@ -40,7 +41,8 @@ Parameters:
     AllowedPattern: '^[a-z0-9-]+/[a-z0-9_-]+$'
     Description: >-
       The owner/name repository, in lower case, whose GHCR images deploys accept. Only that
-      repository's owner and workflows can push there.
+      repository's owner and workflows can push there, and only its version tags may run deploys
+      from GitHub Actions.
 
 Conditions:
   HasSiteAddress: !Not [!Equals [!Ref SiteAddress, '']]
@@ -388,6 +390,67 @@ Resources:
                           [!Join ['-', !Split ['.', !GetAtt ElasticIp.PublicIp]], '.nip.io'],
                         ]
 
+  # GitHub Actions deploys a version tag with the role below. It signs in with the job's OpenID
+  # Connect token, so GitHub stores no AWS key. IAM fetches the provider's certificate itself.
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  # Only a job that runs for a version tag of this repository (v and a digit) can assume it:
+  # GitHub's token names the repository and the ref, and IAM checks both. The trust names the repository, so a renamed
+  # account or repository needs this stack updated or deleted first, before someone else can take
+  # the old name.
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Deploys a version tag of the Hello World demo from GitHub Actions.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+              # IAM wildcards have no digit class, so one pattern per digit: the tags the workflow
+              # deploys, v and a digit, as in v1.0.0.
+              StringLike:
+                'token.actions.githubusercontent.com:sub':
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v0*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v1*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v2*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v3*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v4*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v5*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v6*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v7*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v8*'
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/tags/v9*'
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadTheStackOutputs
+                Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Ref AWS::StackId
+              - Sid: SendTheDeployDocument
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${DeployDocument}'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Instance}'
+              # Reads a command's status and output. The action has no resource-level permissions.
+              - Sid: FollowTheDeploy
+                Effect: Allow
+                Action: ssm:GetCommandInvocation
+                Resource: '*'
+
 Outputs:
   SiteUrl:
     Description: The demo.
@@ -412,3 +475,6 @@ Outputs:
   DbEndpoint:
     Description: The database's private address, reachable from the instance only.
     Value: !GetAtt Database.Endpoint.Address
+  DeployRoleArn:
+    Description: The role GitHub Actions deploys with, for the AWS_DEPLOY_ROLE_ARN repository variable.
+    Value: !GetAtt GitHubDeployRole.Arn

@@ -8,7 +8,7 @@ How this project uses AI coding tools, and how to reproduce it. The rules themse
 - **Plans before code.** Every multi-file change starts as a plan that names its files, its tests and the requirement it serves. A person approves the plan.
 - **Evidence over claims.** "Done" means pasted command output, such as `pnpm verify` and `pnpm test:e2e`.
 - **No self-approval.** Separate, read-only reviewer agents check the code, never the session that wrote it.
-- **People own the cloud.** AI tools write the AWS runbook, and a person runs it with Claude Code closed.
+- **People own the cloud.** AI tools write the AWS runbook, and a person runs it with Claude Code closed. A version tag deploys a release with no approval step, so only people push tags. The git guard catches an agent's tag push by mistake, but can't stop one made on purpose.
 
 ## The files
 
@@ -20,7 +20,7 @@ How this project uses AI coding tools, and how to reproduce it. The rules themse
 | [`.claude/settings.json`](../.claude/settings.json) | Permissions. **Allowed:** tests, lint, `docker compose up`, and everyday git: status, diff, log, show, add, commit, push, stash and the plumbing for split commits. **Asked first:** new packages, `docker compose down` and any other git command. **Denied:** reading `.env` and `~/.aws` with Claude's file tools, force-pushes and `git reset --hard` written plainly, and every `aws` and `gh` command |
 | [`.claude/hooks/format-file.mjs`](../.claude/hooks/format-file.mjs) | After every edit, runs Prettier and ESLint's fixes on the file, and reports what ESLint can't fix |
 | [`.claude/hooks/stop-gate.mjs`](../.claude/hooks/stop-gate.mjs) | Before a turn ends, type-checks and lints the changed files. On failure it blocks once, then only warns |
-| [`scripts/git-guard.ts`](../scripts/git-guard.ts) | Before every shell command, blocks force-pushes and branch deletions, `git reset --hard`, `git clean`, `git add --force`, `git -c`, `git config` writes, and every git option that runs another program. It catches them however the flags are spelled: anywhere in the command, abbreviated or escaped. Permission rules only match the start of a command, so they can't do this alone. It's a safety net, not a sandbox |
+| [`scripts/git-guard.ts`](../scripts/git-guard.ts) | Before every shell command, blocks force-pushes, branch deletions and tag pushes (a version tag deploys the demo), `git reset --hard`, `git clean`, `git add --force`, `git -c`, `git config` writes, and every git option that runs another program. It catches them however the flags are spelled: anywhere in the command, abbreviated or escaped. Permission rules only match the start of a command, so they can't do this alone. It's a safety net, not a sandbox |
 | [`.claude/skills/`](../.claude/skills) | `/slice` builds a slice test-first, ending in a verified commit. `/add-dependency` challenges a new package, checks it, pins it and commits it alone. `/self-review` runs the review |
 | [`.claude/agents/`](../.claude/agents) | Four read-only lens reviewers (correctness, security, maintainability, tests and docs) and an adversarial verifier |
 | [`REVIEW.md`](../REVIEW.md) | The review guide: severity scale, evidence rule, checklists, report and triage templates |
@@ -39,6 +39,7 @@ How this project uses AI coding tools, and how to reproduce it. The rules themse
 - **Product and stack:** Vue, Pinia and Vuetify; MySQL on RDS; one EC2 instance; free packages only.
 - **Approvals:** every plan, every new package and any unusual git command. Everyday git runs without prompts, but a push happens only when a person asks for it.
 - **AWS:** every command. Claude writes the runbook, and a person runs it with no AI session open while signed in.
+- **Releases:** pushing a version tag, which deploys the demo with no approval step. The git guard blocks Claude's tag pushes as a safety net. Only a required reviewer in GitHub would hold against an agent set on deploying, and automatic deploys were chosen instead.
 - **GitHub:** the protection of `main` against force-pushes, the guard that nothing on this machine can talk around. Only the owner can turn it on.
 - **Reviews:** what to fix and what to defer, recorded in the triage note.
 

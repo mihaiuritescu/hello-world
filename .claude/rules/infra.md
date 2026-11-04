@@ -11,6 +11,7 @@ paths:
 
 ## Cloud safety (non-negotiable)
 - Never run `aws` or `gh` commands, and never read `~/.aws`. Never print, store or commit credentials or secret values.
+- Never push tags: a version tag deploys the demo.
 - Write every AWS step into `infra/aws/RUNBOOK.md`, with exact parameters and expected output. A human runs it, with no agent session active while signed in to AWS.
 - Before a resource can be deployed, it must appear in `docs/INFRASTRUCTURE.md`, with its monthly cost and how to tear it down.
 
@@ -31,3 +32,4 @@ paths:
 ## GitHub Actions
 - Pin every action to a commit SHA, with the version in a comment.
 - Default to `permissions: contents: read`, and grant more per job only when needed.
+- Only the deploy job gets `id-token: write`, and it runs nothing but the deploy script, because every step of a job with that permission can get the AWS token. The AWS role trusts only this repository's version tags.
