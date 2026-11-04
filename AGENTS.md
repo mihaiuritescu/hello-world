@@ -30,7 +30,7 @@ Integration tests need MySQL, so run `pnpm db:up` first.
   - real-time delivery (`realtime/`).
 - `src/client/`: the Vue app:
   - Pinia stores (`stores/`);
-  - features (`features/map`, `features/chat`);
+  - features (`features/map`, `features/chat`, `features/header`);
   - helpers (`lib/`).
 - `e2e/`: Playwright specs.
 - `scripts/`: repository tooling.
@@ -129,6 +129,7 @@ Integration tests need MySQL, so run `pnpm db:up` first.
 | S4 | Hardening: UI states, accessibility, rate limits, docs |
 | S5 | AWS demo deploy |
 | S6 | Self-review and fixes |
+| S7 | Extras: pin clusters, a header with the online count, renaming and deleting by a room's creator (FR-7 to FR-10) |
 
 ## Definition of done
 
